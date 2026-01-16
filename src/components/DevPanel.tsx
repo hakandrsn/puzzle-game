@@ -1,0 +1,251 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
+import {
+  Alert,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { COLORS } from "../constants/gameConfig";
+import { useGameStore } from "../store/gameStore";
+import { useHintActions } from "../store/hintStore";
+import { useProgressActions } from "../store/progressStore";
+import { createSolvedGrid } from "../utils/puzzleLogic";
+
+const DevPanel: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [chapterId, setChapterId] = useState("1");
+  const [levelId, setLevelId] = useState("1");
+  const router = useRouter();
+  const gameStore = useGameStore();
+  const hintActions = useHintActions();
+  const progressActions = useProgressActions();
+
+  const goToLevel = () => {
+    const cId = parseInt(chapterId) || 1;
+    const lId = parseInt(levelId) || 1;
+    router.push(`/game/${cId}/${lId}`);
+    setIsOpen(false);
+  };
+
+  const solveGame = () => {
+    const { gridSize } = gameStore;
+    if (gridSize && gridSize.cols > 0 && gridSize.rows > 0) {
+      const solvedGrid = createSolvedGrid(gridSize);
+      const emptyIndex = gridSize.cols * gridSize.rows - 1;
+      useGameStore.setState({
+        currentGrid: solvedGrid,
+        emptySlotIndex: emptyIndex,
+        isSolved: true,
+      });
+
+      // Reset isSolved after win modal triggers to prevent ghost wins
+      setTimeout(() => {
+        useGameStore.setState({ isSolved: false });
+      }, 100);
+    }
+    setIsOpen(false);
+  };
+
+  const addHints = () => {
+    hintActions.addHints(1000);
+    setIsOpen(false);
+  };
+
+  const clearStorage = async () => {
+    Alert.alert(
+      "Tüm Veriyi Sil",
+      "AsyncStorage'daki TÜM veriler silinecek (progress, hints, level states). Emin misiniz?",
+      [
+        { text: "İptal", style: "cancel" },
+        {
+          text: "Sil",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await AsyncStorage.clear();
+              Alert.alert(
+                "Başarılı",
+                "Tüm veriler silindi. Uygulama yeniden başlatılıyor..."
+              );
+              setIsOpen(false);
+              // Reload app
+              setTimeout(() => {
+                router.replace("/");
+              }, 500);
+            } catch (error) {
+              Alert.alert("Hata", "Veri silinirken hata oluştu: " + error);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  return (
+    <>
+      <TouchableOpacity
+        style={styles.floatingButton}
+        onPress={() => setIsOpen(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.floatingButtonText}>🛠</Text>
+      </TouchableOpacity>
+
+      <Modal visible={isOpen} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.panel}>
+            <Text style={styles.title}>Dev Panel</Text>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Level'e Git</Text>
+              <View style={styles.inputRow}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Bölüm</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={chapterId}
+                    onChangeText={setChapterId}
+                    keyboardType="number-pad"
+                    placeholder="1-20"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Level</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={levelId}
+                    onChangeText={setLevelId}
+                    keyboardType="number-pad"
+                    placeholder="1-24"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.button}
+                onPress={goToLevel}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonText}>Git</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Hızlı Aksiyonlar</Text>
+              <TouchableOpacity
+                style={[styles.button, styles.solveButton]}
+                onPress={solveGame}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonText}>🎯 Puzzle'ı Çöz</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.hintButton]}
+                onPress={addHints}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonText}>💡 +10 Hamle Hakkı</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.clearButton]}
+                onPress={clearStorage}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonText}>🗑️ Storage Temizle</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setIsOpen(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.closeButtonText}>Kapat</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+};
+
+const styles = StyleSheet.create({
+  floatingButton: {
+    position: "absolute",
+    bottom: 100,
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 9999,
+    elevation: 10,
+  },
+  floatingButtonText: { fontSize: 20 },
+  overlay: {
+    flex: 1,
+    backgroundColor: COLORS.overlay,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  panel: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 320,
+    borderWidth: 2,
+    borderColor: "#ef4444",
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#ef4444",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  section: { marginBottom: 20, gap: 10 },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+    marginBottom: 8,
+  },
+  inputRow: { flexDirection: "row", gap: 12 },
+  inputGroup: { flex: 1 },
+  inputLabel: { fontSize: 12, color: COLORS.textMuted, marginBottom: 4 },
+  input: {
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  button: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  solveButton: { backgroundColor: "#22c55e" },
+  hintButton: { backgroundColor: COLORS.accent },
+  clearButton: { backgroundColor: "#ef4444" },
+  migrateButton: { backgroundColor: "#6366f1" },
+  buttonText: { color: COLORS.textPrimary, fontSize: 14, fontWeight: "600" },
+  closeButton: { paddingVertical: 12, alignItems: "center" },
+  closeButtonText: { color: COLORS.textMuted, fontSize: 14 },
+});
+
+export default DevPanel;

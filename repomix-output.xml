@@ -1,0 +1,4484 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+app.json
+app/_layout.tsx
+app/chapters.tsx
+app/game/[chapterId]/[levelId].tsx
+app/index.tsx
+app/levels/[chapterId].tsx
+assets/fonts/SpaceMono-Regular.ttf
+assets/images/adaptive-icon.png
+assets/images/favicon.png
+assets/images/icon.png
+assets/images/splash-icon.png
+DEVELOPMENT.md
+firebaseConfig.js
+metro.config.js
+package.json
+src/components/ConfirmModal.tsx
+src/components/DevPanel.tsx
+src/components/NetworkError.tsx
+src/components/PuzzleBoard.tsx
+src/components/Tile.tsx
+src/components/WinModal.tsx
+src/constants/gameConfig.ts
+src/hooks/usePuzzleGame.ts
+src/services/adManager.ts
+src/services/authService.ts
+src/services/dataService.ts
+src/services/deviceService.ts
+src/store/dataStore.ts
+src/store/gameStore.ts
+src/store/hintStore.ts
+src/store/progressStore.ts
+src/types/index.ts
+src/utils/puzzleLogic.ts
+tsconfig.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="app/chapters.tsx">
+import { Image } from "expo-image";
+import { Stack, useRouter } from "expo-router";
+import React from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
+import {
+  BOARD_PADDING,
+  COLORS,
+  getGridColumns,
+} from "../src/constants/gameConfig";
+import {
+  useChapters,
+  useDataActions,
+  useIsDataLoading,
+} from "../src/store/dataStore";
+import { useProgressActions, useTotalStars } from "../src/store/progressStore";
+import { Chapter } from "../src/types";
+
+interface ChapterCardProps {
+  chapter: Chapter;
+  index: number;
+  isUnlocked: boolean;
+  progress: { completed: number; total: number; stars: number };
+  cardWidth: number;
+  onPress: () => void;
+}
+
+const ChapterCard: React.FC<ChapterCardProps> = ({
+  chapter,
+  index,
+  isUnlocked,
+  progress,
+  cardWidth,
+  onPress,
+}) => {
+  const progressPercent = (progress.completed / progress.total) * 100;
+
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(index * 40).springify()}
+      style={{ width: cardWidth }}
+    >
+      <TouchableOpacity
+        style={[styles.card, !isUnlocked && styles.cardLocked]}
+        onPress={onPress}
+        disabled={!isUnlocked}
+        activeOpacity={0.7}
+      >
+        {/* Thumbnail Section */}
+        <View style={styles.thumbnailArea}>
+          <Image
+            source={chapter.thumbnail}
+            style={styles.thumbnail}
+            contentFit="cover"
+          />
+          <View style={styles.overlay} />
+          <View style={styles.idBadge}>
+            <Text style={styles.idBadgeTxt}>{chapter.id}</Text>
+          </View>
+          {!isUnlocked && (
+            <View style={styles.lockedArea}>
+              <Text style={styles.lockIc}>🔒</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Content Section */}
+        <View style={styles.infoArea}>
+          <Text style={styles.name} numberOfLines={1}>
+            {chapter.name}
+          </Text>
+          <View style={styles.progressRow}>
+            <View style={styles.barBg}>
+              <View
+                style={[styles.barFill, { width: `${progressPercent}%` }]}
+              />
+            </View>
+            <Text style={styles.progressStats}>
+              {progress.completed}/{progress.total}
+            </Text>
+          </View>
+          <View style={styles.starInfo}>
+            <Text style={styles.starIc}>★</Text>
+            <Text style={styles.starVal}>{progress.stars}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+export default function ChaptersScreen() {
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const totalStars = useTotalStars();
+  const progressActions = useProgressActions();
+  const chapters = useChapters();
+  const { getChapters } = useDataActions();
+  const isLoading = useIsDataLoading();
+
+  React.useEffect(() => {
+    getChapters();
+  }, []);
+
+  const numColumns = getGridColumns(width);
+  const padding = BOARD_PADDING;
+  const gap = 15;
+  const cardWidth = (width - padding * 2 - gap * (numColumns - 1)) / numColumns;
+
+  if (isLoading && chapters.length === 0) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={COLORS.accent} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          title: "Bölümler",
+          headerStyle: { backgroundColor: COLORS.background },
+          headerTintColor: COLORS.textPrimary,
+          headerShadowVisible: false,
+          headerRight: () => (
+            <View style={styles.headerStars}>
+              <Text style={styles.headerStarIcon}>★</Text>
+              <Text style={styles.headerStarText}>{totalStars}</Text>
+            </View>
+          ),
+        }}
+      />
+
+      <FlatList
+        data={chapters}
+        renderItem={({ item, index }) => (
+          <ChapterCard
+            chapter={item}
+            index={index}
+            isUnlocked={progressActions.isChapterUnlocked(item.id)}
+            progress={progressActions.getChapterProgress(item.id)}
+            cardWidth={cardWidth}
+            onPress={() => router.push(`/levels/${item.id}`)}
+          />
+        )}
+        keyExtractor={(item) => item.id.toString()}
+        numColumns={numColumns}
+        key={numColumns}
+        contentContainerStyle={[styles.listContent, { padding }]}
+        columnWrapperStyle={{ gap }}
+        ItemSeparatorComponent={() => <View style={{ height: gap }} />}
+        showsVerticalScrollIndicator={false}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.background },
+  centered: { justifyContent: "center", alignItems: "center" },
+  headerStars: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  headerStarIcon: { fontSize: 16, color: COLORS.starFilled },
+  headerStarText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+  },
+  listContent: { paddingBottom: 40 },
+  card: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  cardLocked: { opacity: 0.6 },
+  thumbnailArea: { aspectRatio: 1.5, position: "relative" },
+  thumbnail: { width: "100%", height: "100%" },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.2)",
+  },
+  idBadge: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.background,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  idBadgeTxt: { color: COLORS.textPrimary, fontWeight: "900", fontSize: 13 },
+  lockedArea: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  lockIc: { fontSize: 32 },
+  infoArea: { padding: 15, gap: 10 },
+  name: { fontSize: 18, fontWeight: "800", color: COLORS.textPrimary },
+  progressRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  barBg: {
+    flex: 1,
+    height: 6,
+    backgroundColor: COLORS.surfaceLight,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  barFill: { height: "100%", backgroundColor: COLORS.accent },
+  progressStats: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontWeight: "700",
+  },
+  starInfo: { flexDirection: "row", alignItems: "center", gap: 5 },
+  starIc: { fontSize: 14, color: COLORS.starFilled },
+  starVal: { fontSize: 14, color: COLORS.textPrimary, fontWeight: "700" },
+});
+</file>
+
+<file path="app/game/[chapterId]/[levelId].tsx">
+import ConfirmModal from "@/src/components/ConfirmModal";
+import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
+import { SafeAreaView as SafeAreaContextView } from "react-native-safe-area-context";
+import PuzzleBoard from "../../../src/components/PuzzleBoard";
+import WinModal from "../../../src/components/WinModal";
+import {
+  BOARD_PADDING,
+  calculateStars,
+  COLORS,
+  getBoardSize,
+  HINT_CONFIG,
+  LEVELS_PER_CHAPTER,
+} from "../../../src/constants/gameConfig";
+import { usePuzzleGame } from "../../../src/hooks/usePuzzleGame";
+import {
+  showInterstitial,
+  showRewarded,
+} from "../../../src/services/adManager";
+import { useDataActions, useIsDataLoading } from "../../../src/store/dataStore";
+import { useHintActions, useHintCount } from "../../../src/store/hintStore";
+import { useProgressActions } from "../../../src/store/progressStore";
+import { Chapter, GridSize, Level } from "../../../src/types";
+
+export default function GameBoardScreen() {
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const { chapterId, levelId } = useLocalSearchParams<{
+    chapterId: string;
+    levelId: string;
+  }>();
+  const [showWinModal, setShowWinModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [earnedStars, setEarnedStars] = useState(0);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [showAdModal, setShowAdModal] = useState(false);
+  const [showSolvedInfoModal, setShowSolvedInfoModal] = useState(false);
+  const [showAdSuccessModal, setShowAdSuccessModal] = useState(false);
+
+  const { getChapterById, getLevelById, getChapters } = useDataActions();
+  const isLoading = useIsDataLoading();
+
+  const [chapter, setChapter] = useState<Chapter | undefined>();
+  const [level, setLevel] = useState<Level | undefined>();
+
+  const progressActions = useProgressActions();
+  const hintCount = useHintCount();
+  const hintActions = useHintActions();
+
+  useEffect(() => {
+    const initData = async () => {
+      await getChapters();
+      const c = getChapterById(Number(chapterId));
+      const l = await getLevelById(Number(chapterId), Number(levelId));
+      setChapter(c);
+      setLevel(l);
+    };
+    initData();
+  }, [chapterId, levelId]);
+
+  const boardSize = getBoardSize(width);
+
+  useEffect(() => {
+    if (level) {
+      progressActions.setLastPlayed(level.chapterId, level.id);
+    }
+  }, [level]);
+
+  const handleWin = useCallback(
+    async (moves: number) => {
+      if (level) {
+        const stars = calculateStars(moves, level.gridSize as GridSize);
+        setEarnedStars(stars);
+        setShowWinModal(true);
+        if (level.id === LEVELS_PER_CHAPTER) {
+          hintActions.addChapterBonus();
+        }
+        await showInterstitial();
+      }
+    },
+    [level, hintActions]
+  );
+
+  const {
+    grid,
+    moveCount,
+    isSolved,
+    gridSize,
+    isInitialized,
+    handleTilePress,
+    resetGame,
+    useHint,
+    saveState,
+    completeAndSave,
+  } = usePuzzleGame({
+    level: level,
+    onWin: handleWin,
+  });
+
+  const isUnlocked =
+    chapterId && levelId
+      ? progressActions.isLevelUnlocked(Number(chapterId), Number(levelId))
+      : false;
+  const levelProgress =
+    chapterId && levelId
+      ? progressActions.getLevelProgress(Number(chapterId), Number(levelId))
+      : null;
+  const isPreviouslyWon = levelProgress?.completed ?? false;
+  const [isReplaying, setIsReplaying] = useState(false);
+  const effectiveIsSolved = isSolved || (isPreviouslyWon && !isReplaying);
+
+  const handleReplay = () => {
+    setIsReplaying(true);
+    resetGame();
+  };
+
+  const handleResetPress = () => {
+    if (effectiveIsSolved && !isReplaying) {
+      handleReplay();
+      return;
+    }
+
+    if (moveCount > 0 && !isSolved) {
+      setShowResetModal(true);
+    } else {
+      resetGame();
+    }
+  };
+
+  useEffect(() => {
+    if (showWinModal) completeAndSave();
+  }, [showWinModal, completeAndSave]);
+
+  const handleGetHints = async () => {
+    if (hintCount > 0) {
+      const isEverythingCorrect = grid.every(
+        (val: number, idx: number) =>
+          val === idx || val === gridSize.cols * gridSize.rows - 1
+      );
+      if (isEverythingCorrect) {
+        setShowSolvedInfoModal(true);
+        return;
+      }
+      useHint();
+      hintActions.useHint();
+    } else {
+      setShowAdModal(true);
+    }
+  };
+
+  const handleBack = () => {
+    saveState?.();
+    router.back();
+  };
+
+  if (isLoading || !chapter || !level) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.errorContainer}>
+          <ActivityIndicator size="large" color={COLORS.accent} />
+        </View>
+      </View>
+    );
+  }
+
+  const isLastLevel = level.id === LEVELS_PER_CHAPTER;
+  const currentStars = calculateStars(moveCount, level.gridSize as GridSize);
+
+  return (
+    <SafeAreaContextView style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* Optimized HUD Header */}
+      <View style={styles.hud}>
+        <View style={styles.topRow}>
+          <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+            <Ionicons name="arrow-back" size={32} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+
+          <View style={styles.levelInfo}>
+            <Text style={styles.levelLabel}>
+              {chapter.id}-{level.id}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.previewBtn}
+            onPress={() => setShowPreviewModal(true)}
+          >
+            <Image source={level.imageSource} style={styles.previewThumb} />
+            <Text style={styles.zoomTag}>🔍</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Stats Row: Stars - Moves - Reset */}
+        <View style={styles.statsRow}>
+          {/* Left: Stars */}
+          <View style={styles.starsArea}>
+            {[1, 2, 3].map((s) => (
+              <Text
+                key={s}
+                style={[
+                  styles.bigStar,
+                  s <= currentStars && styles.bigStarFilled,
+                ]}
+              >
+                ★
+              </Text>
+            ))}
+          </View>
+
+          {/* Center: Moves Count */}
+          <View style={styles.movesArea}>
+            <Text style={styles.movesVal}>{moveCount}</Text>
+          </View>
+
+          {/* Right: Reset Button */}
+          <TouchableOpacity
+            style={styles.resetBtnHeader}
+            onPress={handleResetPress}
+          >
+            <Ionicons name="refresh" size={28} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Puzzle Board or Solved Image */}
+      <View style={styles.boardWrapper}>
+        {effectiveIsSolved && !isSolved && !isReplaying ? (
+          <Animated.View
+            entering={FadeIn}
+            style={{ width: boardSize, height: boardSize }}
+          >
+            <Image
+              source={level.imageSource}
+              style={{ width: "100%", height: "100%", borderRadius: 8 }}
+            />
+          </Animated.View>
+        ) : (
+          <Animated.View
+            entering={FadeIn}
+            key={isInitialized ? "board" : "loading"}
+          >
+            {isInitialized && (
+              <PuzzleBoard
+                grid={grid}
+                gridSize={gridSize}
+                imageSource={level.imageSource}
+                onTilePress={handleTilePress}
+                boardSize={boardSize}
+              />
+            )}
+          </Animated.View>
+        )}
+      </View>
+
+      {/* Floating Bottom Controls */}
+      {/* Floating Bottom Controls - Only Hint or Empty */}
+      <View style={styles.controls}>
+        {!effectiveIsSolved && (
+          <TouchableOpacity
+            style={[styles.controlBtn, styles.btnPrimary]}
+            onPress={handleGetHints}
+          >
+            {hintCount > 0 && (
+              <View style={[styles.badge, styles.badgeActive]}>
+                <Text style={styles.badgeTxt}>{hintCount}</Text>
+              </View>
+            )}
+            <Text style={styles.controlBtnIcon}>💡</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Zoom Preview Modal */}
+      <Modal visible={showPreviewModal} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowPreviewModal(false)}
+        >
+          <Animated.View entering={FadeInUp} style={styles.modalBox}>
+            <Image
+              source={level.imageSource}
+              style={styles.fullImg}
+              contentFit="contain"
+            />
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setShowPreviewModal(false)}
+            >
+              <Text style={styles.modalCloseTxt}>GİZLE</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* --- MODALS --- */}
+
+      {/* 1. Reset Confirmation */}
+      <ConfirmModal
+        visible={showResetModal}
+        title="Yeniden Başlat"
+        message="Bölüm ilerlemeniz sıfırlanacak. Emin misiniz?"
+        confirmText="Sıfırla"
+        cancelText="Vazgeç"
+        isDestructive
+        onConfirm={() => {
+          setShowResetModal(false);
+          resetGame();
+        }}
+        onCancel={() => setShowResetModal(false)}
+      />
+
+      {/* 2. Watch Ad Confirmation */}
+      <ConfirmModal
+        visible={showAdModal}
+        title="Hamle Al"
+        message={`Reklam izleyerek ${HINT_CONFIG.rewardedAdHints} hamle hakkı kazan!`}
+        confirmText="Reklam İzle"
+        cancelText="İptal"
+        onConfirm={async () => {
+          setShowAdModal(false);
+          const rewarded = await showRewarded();
+          if (rewarded) {
+            hintActions.addHints(HINT_CONFIG.rewardedAdHints);
+            setTimeout(() => setShowAdSuccessModal(true), 500);
+          }
+        }}
+        onCancel={() => setShowAdModal(false)}
+      />
+
+      {/* 3. Already Solved Info */}
+      <ConfirmModal
+        visible={showSolvedInfoModal}
+        title="Zaten Çözüldü"
+        message="Tüm parçalar doğru yerinde!"
+        confirmText="Tamam"
+        onConfirm={() => setShowSolvedInfoModal(false)}
+      />
+
+      {/* 4. Ad Success Info */}
+      <ConfirmModal
+        visible={showAdSuccessModal}
+        title="Tebrikler!"
+        message={`${HINT_CONFIG.rewardedAdHints} hamle hakkı kazandın!`}
+        confirmText="Harika"
+        onConfirm={() => setShowAdSuccessModal(false)}
+      />
+
+      <WinModal
+        visible={showWinModal}
+        moves={moveCount}
+        stars={earnedStars}
+        isLastLevel={isLastLevel}
+        chapterColor={chapter.color}
+        onNextLevel={() => {
+          setShowWinModal(false);
+          if (!isLastLevel)
+            router.replace(`/game/${chapterId}/${Number(levelId) + 1}`);
+        }}
+        onReplay={() => {
+          setShowWinModal(false);
+          handleReplay();
+        }}
+        onBackToLevels={() => {
+          setShowWinModal(false);
+          router.replace(`/levels/${chapterId}`);
+        }}
+      />
+    </SafeAreaContextView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.background },
+  hud: {
+    paddingHorizontal: BOARD_PADDING,
+    paddingTop: 10,
+    gap: 10,
+  },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 60,
+    paddingHorizontal: 4,
+  },
+  backBtn: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "flex-start",
+  },
+  levelInfo: { flex: 1, alignItems: "center" },
+  levelLabel: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: COLORS.textPrimary,
+    letterSpacing: 1,
+  },
+  previewBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    overflow: "hidden",
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  previewThumb: { width: "100%", height: "100%" },
+  zoomTag: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    fontSize: 8,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    padding: 1,
+  },
+  statsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  starsArea: {
+    flexDirection: "row",
+    gap: 4,
+    width: 60,
+  },
+  bigStar: { fontSize: 24, color: COLORS.starEmpty },
+  bigStarFilled: { color: COLORS.starFilled },
+
+  movesArea: {
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+  },
+  movesVal: {
+    fontSize: 48,
+    fontWeight: "900",
+    color: COLORS.textPrimary,
+  },
+
+  resetBtnHeader: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "flex-end",
+  },
+  boardWrapper: {
+    flex: 1,
+    padding: BOARD_PADDING,
+  },
+  controls: {
+    position: "absolute",
+    bottom: 80, // Moved up
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 50, // Increased gap
+    zIndex: 100,
+  },
+  controlBtn: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  btnPrimary: {
+    backgroundColor: "transparent",
+    borderWidth: 2, // Thicker border for visibility
+    borderColor: COLORS.accent,
+  },
+  btnSecondary: {
+    backgroundColor: "transparent",
+  },
+  controlBtnIcon: { fontSize: 32 },
+  replayIcon: { fontSize: 48, color: "#fafafa" }, // Much larger
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    backgroundColor: COLORS.surfaceLight,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: COLORS.background,
+    zIndex: 1,
+  },
+  badgeActive: { backgroundColor: COLORS.accent },
+  badgeTxt: { color: COLORS.textPrimary, fontSize: 10, fontWeight: "900" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalBox: {
+    width: "90%",
+    aspectRatio: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
+    padding: 12,
+    alignItems: "center",
+  },
+  fullImg: { width: "100%", height: "100%", borderRadius: 16 },
+  modalClose: { marginTop: 20, padding: 10 },
+  modalCloseTxt: {
+    color: COLORS.textPrimary,
+    fontWeight: "800",
+    letterSpacing: 2,
+  },
+  errorContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+});
+</file>
+
+<file path="app/index.tsx">
+import { Stack, useRouter } from "expo-router";
+import React from "react";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  BOARD_PADDING,
+  COLORS,
+  LEVELS_PER_CHAPTER,
+  getResponsiveValue,
+} from "../src/constants/gameConfig";
+import {
+  useChapters,
+  useDataActions,
+  useIsDataLoading,
+} from "../src/store/dataStore";
+import { useHintCount } from "../src/store/hintStore";
+import { useLastPlayed, useTotalStars } from "../src/store/progressStore";
+
+export default function StartScreen() {
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const totalStars = useTotalStars();
+  const lastPlayed = useLastPlayed();
+  const hintCount = useHintCount();
+  const chapters = useChapters();
+  const { getChapters, getChapterById } = useDataActions();
+  const isLoading = useIsDataLoading();
+
+  React.useEffect(() => {
+    getChapters();
+  }, []);
+
+  const totalChapterCount = chapters.length || 20; // Fallback
+  const maxStars = totalChapterCount * LEVELS_PER_CHAPTER * 3;
+
+  const buttonWidth = getResponsiveValue(width, {
+    phone: "85%",
+    tablet: 320 as any,
+  });
+
+  const handleContinue = () => {
+    if (lastPlayed) {
+      router.push(`/game/${lastPlayed.chapterId}/${lastPlayed.levelId}`);
+    } else {
+      router.push("/game/1/1");
+    }
+  };
+
+  const handleChapters = () => {
+    router.push("/chapters");
+  };
+
+  const lastChapter = lastPlayed ? getChapterById(lastPlayed.chapterId) : null;
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <View style={styles.content}>
+        {/* Logo */}
+        <Animated.View
+          entering={FadeInDown.delay(100).springify()}
+          style={styles.logoContainer}
+        >
+          <View style={styles.logoIcon}>
+            <View style={styles.logoGrid}>
+              {[...Array(9)].map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.logoTile,
+                    i === 8 ? styles.logoTileEmpty : null,
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+          <Text style={styles.title}>PUZZLE</Text>
+        </Animated.View>
+
+        {/* Stats Row */}
+        <Animated.View
+          entering={FadeInDown.delay(200).springify()}
+          style={styles.statsRow}
+        >
+          <View style={styles.statBadge}>
+            <Text style={styles.statIcon}>★</Text>
+            <Text style={styles.statValue}>{totalStars}</Text>
+          </View>
+          <View style={styles.statBadge}>
+            <Text style={styles.statIcon}>💡</Text>
+            <Text style={styles.statValue}>{hintCount}</Text>
+          </View>
+        </Animated.View>
+
+        {/* Buttons */}
+        <Animated.View
+          entering={FadeInUp.delay(300).springify()}
+          style={[styles.buttonsContainer, { width: buttonWidth as any }]}
+        >
+          {/* Continue Button */}
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={handleContinue}
+            activeOpacity={0.8}
+          >
+            <View style={styles.continueContent}>
+              <Text style={styles.continueTitle}>Devam Et</Text>
+              {lastPlayed && lastChapter && (
+                <Text style={styles.continueSubtitle}>
+                  {lastChapter.name} • Seviye {lastPlayed.levelId}
+                </Text>
+              )}
+              {!lastPlayed && (
+                <Text style={styles.continueSubtitle}>Yeni Oyun Başlat</Text>
+              )}
+            </View>
+            <Text style={styles.continueArrow}>→</Text>
+          </TouchableOpacity>
+
+          {/* Chapters Button */}
+          <TouchableOpacity
+            style={styles.chaptersButton}
+            onPress={handleChapters}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.chaptersButtonText}>Bölümler</Text>
+            {isLoading ? (
+              <ActivityIndicator size="small" color={COLORS.textSecondary} />
+            ) : (
+              <Text style={styles.chaptersCount}>{totalChapterCount}</Text>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* Progress */}
+        <Animated.View
+          entering={FadeInUp.delay(400)}
+          style={styles.progressContainer}
+        >
+          <View style={styles.progressBar}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${(totalStars / maxStars) * 100}%` },
+              ]}
+            />
+          </View>
+          <Text style={styles.progressText}>
+            {totalStars} / {maxStars} yıldız
+          </Text>
+        </Animated.View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  content: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: BOARD_PADDING,
+  },
+  logoContainer: {
+    alignItems: "center",
+    marginBottom: 32,
+  },
+  logoIcon: {
+    width: 88,
+    height: 88,
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 12,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  logoGrid: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 4,
+  },
+  logoTile: {
+    width: "30%",
+    aspectRatio: 1,
+    backgroundColor: COLORS.primary,
+    borderRadius: 4,
+  },
+  logoTileEmpty: {
+    backgroundColor: "transparent",
+  },
+  title: {
+    fontSize: 42,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    letterSpacing: 6,
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 48,
+  },
+  statBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.surface,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    gap: 8,
+  },
+  statIcon: {
+    fontSize: 18,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.textPrimary,
+  },
+  buttonsContainer: {
+    gap: 12,
+    marginBottom: 48,
+  },
+  continueButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  continueContent: {
+    flex: 1,
+  },
+  continueTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  continueSubtitle: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  continueArrow: {
+    color: COLORS.textPrimary,
+    fontSize: 24,
+    fontWeight: "300",
+  },
+  chaptersButton: {
+    backgroundColor: COLORS.surface,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  chaptersButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  chaptersCount: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    backgroundColor: COLORS.surfaceLight,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  progressContainer: {
+    alignItems: "center",
+    width: "60%",
+  },
+  progressBar: {
+    width: "100%",
+    height: 4,
+    backgroundColor: COLORS.surface,
+    borderRadius: 2,
+    overflow: "hidden",
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: COLORS.starFilled,
+    borderRadius: 2,
+  },
+  progressText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+  },
+});
+</file>
+
+<file path="app/levels/[chapterId].tsx">
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import React from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
+import {
+  BOARD_PADDING,
+  COLORS,
+  getResponsiveValue,
+} from "../../src/constants/gameConfig";
+import { useDataActions, useIsDataLoading } from "../../src/store/dataStore";
+import { useProgressActions } from "../../src/store/progressStore";
+import { Level, LevelProgress } from "../../src/types";
+
+interface LevelCardProps {
+  level: Level;
+  index: number;
+  isUnlocked: boolean;
+  progress: LevelProgress | null;
+  cardSize: number;
+  chapterColor?: string;
+  onPress: () => void;
+}
+
+import { Image } from "expo-image"; // Ensure this is imported at top of file
+
+const LevelCard: React.FC<LevelCardProps> = ({
+  level,
+  index,
+  isUnlocked,
+  progress,
+  cardSize,
+  chapterColor,
+  onPress,
+}) => {
+  return (
+    <Animated.View entering={FadeInDown.delay(index * 20).springify()}>
+      <TouchableOpacity
+        style={[
+          styles.levelCard,
+          { width: cardSize, height: cardSize },
+          progress?.completed && {
+            borderColor: chapterColor || COLORS.accent,
+            borderWidth: 2,
+          },
+        ]}
+        onPress={onPress}
+        disabled={!isUnlocked}
+        activeOpacity={0.7}
+      >
+        {/* Background Image */}
+        <Image
+          source={level.imageSource}
+          style={[StyleSheet.absoluteFill, styles.cardBgImage]}
+          contentFit="cover"
+          transition={200}
+        />
+
+        {/* Dark Overlay for Readability */}
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            styles.cardOverlay,
+            !isUnlocked && styles.cardOverlayLocked,
+          ]}
+        />
+
+        {isUnlocked ? (
+          <View style={styles.cardContent}>
+            <View style={styles.levelBadge}>
+              <Text style={styles.levelNumber}>{level.id}</Text>
+            </View>
+
+            {progress?.completed && (
+              <View style={styles.starsRow}>
+                {[1, 2, 3].map((star) => (
+                  <Text
+                    key={star}
+                    style={[
+                      styles.star,
+                      star <= (progress?.stars || 0) && styles.starFilled,
+                    ]}
+                  >
+                    ★
+                  </Text>
+                ))}
+              </View>
+            )}
+          </View>
+        ) : (
+          <Text style={styles.lockIcon}>🔒</Text>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
+
+export default function LevelsScreen() {
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const { chapterId } = useLocalSearchParams<{ chapterId: string }>();
+  const progressActions = useProgressActions();
+  const { getLevels, getChapterById } = useDataActions();
+  const isLoading = useIsDataLoading();
+  const [levels, setLevels] = React.useState<Level[]>([]);
+  const chapter = getChapterById(Number(chapterId));
+
+  React.useEffect(() => {
+    const loadLevels = async () => {
+      const fetchedLevels = await getLevels(Number(chapterId));
+      setLevels(fetchedLevels);
+    };
+    loadLevels();
+  }, [chapterId]);
+
+  if (isLoading && levels.length === 0) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={COLORS.accent} />
+      </View>
+    );
+  }
+
+  if (!chapter) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>Kategori bulunamadı</Text>
+      </View>
+    );
+  }
+
+  const numColumns = getResponsiveValue(width, { phone: 4, tablet: 6 });
+  const padding = BOARD_PADDING;
+  const gap = 10;
+  const cardSize = (width - padding * 2 - gap * (numColumns - 1)) / numColumns;
+  const chapterProgress = progressActions.getChapterProgress(chapter.id);
+
+  const renderLevel = ({ item, index }: { item: Level; index: number }) => {
+    const isUnlocked = progressActions.isLevelUnlocked(chapter.id, item.id);
+    const progress = progressActions.getLevelProgress(chapter.id, item.id);
+    return (
+      <LevelCard
+        level={item}
+        index={index}
+        isUnlocked={isUnlocked}
+        progress={progress}
+        cardSize={cardSize}
+        chapterColor={chapter.color}
+        onPress={() => router.push(`/game/${chapterId}/${item.id}`)}
+      />
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          title: chapter.name,
+          headerStyle: { backgroundColor: COLORS.background },
+          headerTintColor: COLORS.textPrimary,
+          headerShadowVisible: false,
+        }}
+      />
+
+      {/* Header Info (Aesthetics Update) */}
+      <View style={styles.headerInfoArea}>
+        <View style={styles.headerTop}>
+          <View
+            style={[styles.chapterBadge, { backgroundColor: COLORS.surface }]}
+          >
+            <Text style={styles.chapterBadgeText}>{chapter.id}</Text>
+          </View>
+          <View style={styles.headerTitles}>
+            <Text style={styles.headerTitle}>{chapter.name}</Text>
+            <View style={styles.progressPill}>
+              <Text style={styles.progressPillText}>
+                {chapterProgress.completed} / {chapterProgress.total} SEVİYE
+              </Text>
+            </View>
+          </View>
+          <View style={styles.starPill}>
+            <Text style={styles.starPillIcon}>★</Text>
+            <Text style={styles.starPillText}>{chapterProgress.stars}</Text>
+          </View>
+        </View>
+      </View>
+
+      <FlatList
+        data={levels}
+        renderItem={renderLevel}
+        keyExtractor={(item) => item.id.toString()}
+        numColumns={numColumns}
+        key={numColumns}
+        contentContainerStyle={[styles.listContent, { padding }]}
+        columnWrapperStyle={{ gap }}
+        ItemSeparatorComponent={() => <View style={{ height: gap }} />}
+        showsVerticalScrollIndicator={false}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  centered: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorText: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 24,
+  },
+  headerInfoArea: {
+    padding: BOARD_PADDING,
+    paddingBottom: 20,
+    backgroundColor: COLORS.background,
+  },
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+  },
+  chapterBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  chapterBadgeText: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: COLORS.textPrimary,
+  },
+  headerTitles: { flex: 1 },
+  headerTitle: { fontSize: 24, fontWeight: "800", color: COLORS.textPrimary },
+  progressPill: {
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+    marginTop: 4,
+  },
+  progressPillText: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    fontWeight: "700",
+  },
+  starPill: {
+    backgroundColor: COLORS.surface,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  starPillIcon: { color: COLORS.starFilled, fontSize: 18 },
+  starPillText: { color: COLORS.textPrimary, fontWeight: "800", fontSize: 16 },
+  listContent: {
+    paddingBottom: 40,
+  },
+  levelCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: "hidden", // Important for image masking
+  },
+  cardBgImage: {
+    opacity: 0.8,
+  },
+  cardOverlay: {
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  cardOverlayLocked: {
+    backgroundColor: "rgba(0,0,0,0.8)",
+  },
+  cardContent: {
+    alignItems: "center",
+  },
+  levelCardLocked: {
+    opacity: 0.3,
+    backgroundColor: "#00000033",
+  },
+  levelBadge: {
+    backgroundColor: "rgba(0,0,0,0.3)",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  levelNumber: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: COLORS.textPrimary,
+  },
+  lockIcon: {
+    fontSize: 24,
+  },
+  starsRow: {
+    flexDirection: "row",
+    marginTop: 4,
+    gap: 2,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  star: { fontSize: 14, color: COLORS.starEmpty },
+  starFilled: { color: COLORS.starFilled },
+});
+</file>
+
+<file path="DEVELOPMENT.md">
+# Puzzle Game - Geliştirme Dokümantasyonu
+
+## 📋 Proje Özeti
+
+React Native (Expo) ile geliştirilmiş, chapter-level bazlı bir **Sliding Tile Puzzle** oyunu. Virtual splitting tekniği kullanılarak görseller fiziksel olarak bölünmeden puzzle parçaları oluşturulur.
+
+## 🎯 Temel Özellikler
+
+### Oyun Mekaniği
+- **Virtual Splitting**: Görseller fiziksel olarak bölünmez, tek görsel üzerinden maskeleme yapılır
+- **Çözülebilir Shuffle**: Her zaman çözülebilir puzzle garantisi (geriye doğru hamle simülasyonu)
+- **Progresif Zorluk**: 
+  - Seviye 1-8: 3×3 grid (50 shuffle hamlesi)
+  - Seviye 9-16: 4×4 grid (100 shuffle hamlesi)
+  - Seviye 17-24: 5×5 grid (150 shuffle hamlesi)
+
+### İçerik
+- **20 Kategori** × **24 Seviye** = **480 Toplam Seviye**
+- Her kategori farklı tema ve renk paleti
+- Her seviye için unique görsel
+
+### İlerleme Sistemi
+- Yıldız sistemi (1-3 yıldız, performansa göre)
+- Chapter unlock sistemi
+- Level unlock sistemi (sıralı açılma)
+- Son oynanan level kaydı
+
+### Hamle Sistemi
+- Varsayılan: **10 hamle hakkı**
+- Her chapter bitiminde: **+5 bonus hamle**
+- Rewarded reklam izleyerek: **+3 hamle hakkı**
+
+### Reklam Sistemi (AdMob)
+- **Interstitial**: Level geçişlerinde gösterilir
+- **Rewarded**: Hamle almak için izlenir
+- Test ID'leri ile geliştirme desteği
+- Expo Go'da conditional loading (native modül yoksa no-op)
+
+## 🏗️ Mimari Yapı
+
+### Dizin Yapısı
+
+```
+puzzle-game/
+├── app/                          # Expo Router ekranları
+│   ├── _layout.tsx              # Root layout (splash, device ID, ads init)
+│   ├── index.tsx                # Start ekranı (Devam Et + Bölümler)
+│   ├── chapters.tsx             # Kategori listesi
+│   ├── levels/[chapterId].tsx   # Seviye listesi
+│   └── game/[chapterId]/[levelId].tsx  # Oyun ekranı
+├── src/
+│   ├── components/
+│   │   ├── Tile.tsx             # Puzzle parçası (virtual splitting)
+│   │   ├── PuzzleBoard.tsx      # Oyun tahtası
+│   │   ├── WinModal.tsx         # Kazanma modalı
+│   │   └── DevPanel.tsx         # Development paneli
+│   ├── hooks/
+│   │   └── usePuzzleGame.ts     # Oyun mantığı hook'u
+│   ├── store/
+│   │   ├── gameStore.ts         # Aktif oyun state'i (Zustand)
+│   │   ├── progressStore.ts     # İlerleme state'i (Zustand + AsyncStorage)
+│   │   └── hintStore.ts         # Hamle hakkı state'i (Zustand + AsyncStorage)
+│   ├── services/
+│   │   ├── deviceService.ts     # Device ID alma
+│   │   └── adManager.ts         # AdMob yönetimi (conditional)
+│   ├── utils/
+│   │   └── puzzleLogic.ts       # Puzzle algoritmaları
+│   ├── types/
+│   │   └── index.ts             # TypeScript tipleri
+│   └── constants/
+│       └── gameConfig.ts         # Oyun konfigürasyonu
+├── app.json                      # Expo config
+├── package.json
+└── tsconfig.json
+```
+
+## 🎨 UI/UX Tasarım
+
+### Renk Paleti (Minimalist Dark Theme)
+
+```typescript
+background: '#0a0a0f'      // Ana arka plan
+surface: '#12121a'         // Kart arka planı
+surfaceLight: '#1e1e2d'    // Hover/active durumlar
+primary: '#8b5cf6'         // Mor (ana renk)
+accent: '#06b6d4'          // Cyan (vurgu)
+```
+
+### Responsive Tasarım
+
+- **Phone** (<768px): 2 sütun grid, 360px max board
+- **Tablet** (≥768px): 3 sütun grid, 480px max board
+- **Desktop** (≥1024px): 4 sütun grid, 480px max board
+
+### Animasyonlar
+
+- Tile hareketleri: `withTiming` (120ms, bounce yok)
+- Modal açılışları: `FadeIn` + `SlideInDown`
+- Sayfa geçişleri: Expo Router slide animation
+
+## 🔧 Teknik Detaylar
+
+### State Management (Zustand)
+
+#### gameStore
+- Aktif oyun durumu
+- Grid state, boş slot, hamle sayısı
+- Çözüm kontrolü
+
+#### progressStore
+- Kullanıcı ilerlemesi (AsyncStorage ile persist)
+- Unlocked chapters/levels
+- Tamamlanan level'ler ve yıldızlar
+- Son oynanan level
+
+#### hintStore
+- Hamle hakkı sayısı (AsyncStorage ile persist)
+- Chapter bonus sistemi
+- Reklam reward sistemi
+
+### Virtual Splitting Tekniği
+
+```typescript
+// Her tile için görsel offset hesaplama
+const imageOffset = {
+  top: -(rowIndex * tileSize),
+  left: -(colIndex * tileSize),
+};
+
+// Container overflow: hidden ile maskeleme
+<View style={{ overflow: 'hidden' }}>
+  <Image style={{ position: 'absolute', ...imageOffset }} />
+</View>
+```
+
+### Shuffle Algoritması
+
+1. Çözülmüş grid ile başla: `[0, 1, 2, ..., n-1]`
+2. X adet geçerli rastgele hamle simüle et
+3. Bu yöntem her zaman çözülebilir puzzle garantiler
+
+### Device ID Sistemi
+
+- `expo-application` ile unique device ID
+- Android: `getAndroidId()`
+- iOS: `getIosIdForVendorAsync()`
+- Web: Fallback ID
+- İlk açılışta loglanır
+
+### AdMob Entegrasyonu
+
+#### Conditional Loading
+- Expo Go'da native modül yoksa no-op fonksiyonlar
+- Try-catch ile güvenli yükleme
+- Production build'de normal çalışır
+
+#### Reklam Tipleri
+- **Interstitial**: Level geçişlerinde
+- **Rewarded**: Hamle almak için
+- Test ID'leri: `TestIds.INTERSTITIAL`, `TestIds.REWARDED`
+
+## 📱 Ekranlar
+
+### 1. Start Screen (`app/index.tsx`)
+- Logo ve başlık
+- **Devam Et** butonu (son kaldığı level)
+- **Bölümler** butonu
+- Yıldız ve hamle hakkı göstergesi
+- İlerleme barı
+
+### 2. Chapters Screen (`app/chapters.tsx`)
+- Grid layout (responsive)
+- Her chapter için:
+  - Thumbnail görsel
+  - Chapter numarası badge
+  - İlerleme barı
+  - Yıldız sayısı
+- Lock overlay (unlocked değilse)
+
+### 3. Levels Screen (`app/levels/[chapterId].tsx`)
+- Chapter header (thumbnail + istatistikler)
+- Level grid (responsive)
+- Her level için:
+  - Level numarası
+  - Grid boyutu
+  - Yıldızlar (tamamlandıysa)
+- Lock icon (unlocked değilse)
+
+### 4. Game Screen (`app/game/[chapterId]/[levelId].tsx`)
+- Header:
+  - Hedef görsel (küçük preview)
+  - Hamle sayısı
+  - Level badge
+- Puzzle board (responsive)
+- Alt butonlar:
+  - Yeniden Başlat
+  - Hamle Al (reklam ile)
+- Win Modal (çözüldüğünde)
+
+## 🛠️ Development Tools
+
+### Dev Panel
+- Sağ altta kırmızı 🛠 butonu
+- Level'e git (bölüm + level seçimi)
+- Puzzle'ı çöz (instant win)
+- +10 hamle hakkı ekle
+
+**Aktif/Pasif**: `app/_layout.tsx` içinde `__DEV_MODE__` değişkeni
+
+## 📦 Bağımlılıklar
+
+### Core
+- `expo`: ~54.0.31
+- `expo-router`: ~6.0.21
+- `react-native`: 0.81.5
+- `react`: 19.1.0
+
+### State & Storage
+- `zustand`: ^5.0.10
+- `@react-native-async-storage/async-storage`: 2.2.0
+
+### Animasyon
+- `react-native-reanimated`: ~4.1.1
+
+### Görsel
+- `expo-image`: ~3.0.11
+
+### Reklam
+- `react-native-google-mobile-ads`: (conditional)
+
+### Utility
+- `expo-application`: Device ID için
+- `expo-splash-screen`: Splash screen kontrolü
+
+## 🔐 Storage Keys
+
+```typescript
+USER_PROGRESS: '@puzzle_game_progress'
+HINT_COUNT: '@puzzle_game_hints'
+LAST_PLAYED: '@puzzle_game_last_played'
+DEVICE_ID: '@puzzle_game_device_id'
+```
+
+## 🎮 Oyun Akışı
+
+1. **Uygulama Açılışı**
+   - Device ID al ve logla
+   - Progress ve hints yükle
+   - AdMob initialize (varsa)
+
+2. **Start Screen**
+   - Devam Et → Son oynanan level
+   - Bölümler → Chapter listesi
+
+3. **Chapter Selection**
+   - Unlocked chapter'lar seçilebilir
+   - Her chapter için progress gösterilir
+
+4. **Level Selection**
+   - Sıralı unlock (önceki level tamamlanmalı)
+   - Tamamlanan level'ler yıldızlı gösterilir
+
+5. **Oyun**
+   - Tile'lara dokunarak hareket ettir
+   - Hamle sayısı takip edilir
+   - Çözüldüğünde:
+     - Yıldız hesaplanır
+     - Progress kaydedilir
+     - Interstitial reklam gösterilir
+     - Chapter bonus verilir (son level ise)
+
+6. **Hamle Al**
+   - Rewarded reklam izle
+   - +3 hamle hakkı kazan
+
+## 🚀 Çalıştırma
+
+### Development
+```bash
+npm start
+# veya
+npx expo start
+```
+
+### Platform Specific
+```bash
+npm run android
+npm run ios
+npm run web
+```
+
+### Cache Temizleme
+```bash
+npm run reset
+# veya
+npx expo start --clear
+```
+
+## ⚠️ Önemli Notlar
+
+### Expo Go Limitation
+- AdMob native modülü Expo Go'da çalışmaz
+- Conditional loading ile uygulama çalışır ama reklamlar gösterilmez
+- Production build için `npx expo prebuild` gerekir (kullanıcı istemiyor)
+
+### Production Build
+- AdMob için native build gerekli
+- `app.json` içinde AdMob App ID'leri yapılandırılmalı
+- Test ID'leri production'da değiştirilmeli
+
+### Performance
+- Tile animasyonları optimize edildi (memo, withTiming)
+- Board boyutu responsive (tablet/phone)
+- Image lazy loading (expo-image)
+
+## 📝 Gelecek Geliştirmeler
+
+- [ ] Backend entegrasyonu (device ID ile kullanıcı takibi)
+- [ ] Leaderboard sistemi
+- [ ] Daily challenges
+- [ ] Power-ups (shuffle, hint, etc.)
+- [ ] Custom image upload
+- [ ] Social sharing
+- [ ] Achievement sistemi
+
+## 🐛 Bilinen Sorunlar
+
+- Expo Go'da AdMob çalışmaz (beklenen davranış)
+- Web platform'da bazı native özellikler sınırlı
+
+## 📄 Lisans
+
+MIT
+
+---
+
+**Son Güncelleme**: 2024
+**Versiyon**: 1.0.0
+</file>
+
+<file path="firebaseConfig.js">
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDbw35GvHjcXVdt4x__MCVo6IeaERVuOV4",
+  authDomain: "puzzle-game-a5b2a.firebaseapp.com",
+  projectId: "puzzle-game-a5b2a",
+  storageBucket: "puzzle-game-a5b2a.firebasestorage.app",
+  messagingSenderId: "167040071688",
+  appId: "1:167040071688:web:9877039f99e61702e579bd",
+  measurementId: "G-3SQGX6R0R4"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+export { auth, db };
+export default app;
+</file>
+
+<file path="metro.config.js">
+// Learn more https://docs.expo.io/guides/customizing-metro
+const { getDefaultConfig } = require('expo/metro-config');
+
+/** @type {import('expo/metro-config').MetroConfig} */
+const config = getDefaultConfig(__dirname);
+
+config.resolver.sourceExts.push('mjs');
+
+module.exports = config;
+</file>
+
+<file path="src/components/ConfirmModal.tsx">
+import React from "react";
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import Animated, { FadeInUp } from "react-native-reanimated";
+import { COLORS } from "../constants/gameConfig";
+
+interface ConfirmModalProps {
+  visible: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel?: () => void; // Made optional
+  confirmText?: string;
+  cancelText?: string;
+  isDestructive?: boolean;
+}
+
+export default function ConfirmModal({
+  visible,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+  confirmText = "Onayla",
+  cancelText = "Vazgeç",
+  isDestructive = false,
+}: ConfirmModalProps) {
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.overlay}>
+        <Animated.View entering={FadeInUp.springify()} style={styles.container}>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.message}>{message}</Text>
+
+          <View style={styles.buttonRow}>
+            {onCancel && (
+              <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+                <Text style={styles.cancelText}>{cancelText}</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.confirmButton,
+                isDestructive && styles.destructiveButton,
+              ]}
+              onPress={onConfirm}
+            >
+              <Text style={styles.confirmText}>{confirmText}</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  container: {
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  message: {
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+  },
+  cancelButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: COLORS.surfaceLight,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  confirmButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: COLORS.accent,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  destructiveButton: {
+    backgroundColor: "#FF453A", // iOS system red or a defined error color
+  },
+  cancelText: {
+    color: COLORS.textSecondary,
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  confirmText: {
+    color: "#000",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+});
+</file>
+
+<file path="src/components/DevPanel.tsx">
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
+import {
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { COLORS } from "../constants/gameConfig";
+import { useGameStore } from "../store/gameStore";
+import { useHintActions } from "../store/hintStore";
+import { createSolvedGrid } from "../utils/puzzleLogic";
+
+const DevPanel: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [chapterId, setChapterId] = useState("1");
+  const [levelId, setLevelId] = useState("1");
+  const router = useRouter();
+  const gameStore = useGameStore();
+  const hintActions = useHintActions();
+
+  const goToLevel = () => {
+    const cId = parseInt(chapterId) || 1;
+    const lId = parseInt(levelId) || 1;
+    router.push(`/game/${cId}/${lId}`);
+    setIsOpen(false);
+  };
+
+  const solveGame = () => {
+    const { gridSize } = gameStore;
+    if (gridSize > 0) {
+      const solvedGrid = createSolvedGrid(gridSize);
+      const emptyIndex = gridSize * gridSize - 1;
+      useGameStore.setState({
+        currentGrid: solvedGrid,
+        emptySlotIndex: emptyIndex,
+        isSolved: true,
+      });
+    }
+    setIsOpen(false);
+  };
+
+  const addHints = () => {
+    hintActions.addHints(10);
+    setIsOpen(false);
+  };
+
+  return (
+    <>
+      <TouchableOpacity
+        style={styles.floatingButton}
+        onPress={() => setIsOpen(true)}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.floatingButtonText}>🛠</Text>
+      </TouchableOpacity>
+
+      <Modal visible={isOpen} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.panel}>
+            <Text style={styles.title}>Dev Panel</Text>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Level'e Git</Text>
+              <View style={styles.inputRow}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Bölüm</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={chapterId}
+                    onChangeText={setChapterId}
+                    keyboardType="number-pad"
+                    placeholder="1-20"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Level</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={levelId}
+                    onChangeText={setLevelId}
+                    keyboardType="number-pad"
+                    placeholder="1-24"
+                    placeholderTextColor={COLORS.textMuted}
+                  />
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.button}
+                onPress={goToLevel}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonText}>Git</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Hızlı Aksiyonlar</Text>
+              <TouchableOpacity
+                style={[styles.button, styles.solveButton]}
+                onPress={solveGame}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonText}>🎯 Puzzle'ı Çöz</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.hintButton]}
+                onPress={addHints}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonText}>💡 +10 Hamle Hakkı</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setIsOpen(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.closeButtonText}>Kapat</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+};
+
+const styles = StyleSheet.create({
+  floatingButton: {
+    position: "absolute",
+    bottom: 100,
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#ef4444",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 9999,
+    elevation: 10,
+  },
+  floatingButtonText: { fontSize: 20 },
+  overlay: {
+    flex: 1,
+    backgroundColor: COLORS.overlay,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  panel: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 320,
+    borderWidth: 2,
+    borderColor: "#ef4444",
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#ef4444",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  section: { marginBottom: 20, gap: 10 },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.textSecondary,
+    marginBottom: 8,
+  },
+  inputRow: { flexDirection: "row", gap: 12 },
+  inputGroup: { flex: 1 },
+  inputLabel: { fontSize: 12, color: COLORS.textMuted, marginBottom: 4 },
+  input: {
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  button: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  solveButton: { backgroundColor: "#22c55e" },
+  hintButton: { backgroundColor: COLORS.accent },
+  migrateButton: { backgroundColor: "#6366f1" },
+  buttonText: { color: COLORS.textPrimary, fontSize: 14, fontWeight: "600" },
+  closeButton: { paddingVertical: 12, alignItems: "center" },
+  closeButtonText: { color: COLORS.textMuted, fontSize: 14 },
+});
+
+export default DevPanel;
+</file>
+
+<file path="src/components/NetworkError.tsx">
+import React from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { COLORS } from "../constants/gameConfig";
+
+interface NetworkErrorProps {
+  onRetry: () => void;
+  message?: string;
+}
+
+export const NetworkError: React.FC<NetworkErrorProps> = ({
+  onRetry,
+  message = "Veri yüklenemedi. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.",
+}) => {
+  return (
+    <View style={styles.container}>
+      <View style={styles.iconContainer}>
+        <Text style={styles.icon}>📡</Text>
+      </View>
+      <Text style={styles.title}>Bağlantı Hatası</Text>
+      <Text style={styles.message}>{message}</Text>
+      <TouchableOpacity
+        style={styles.retryButton}
+        onPress={onRetry}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.retryText}>Tekrar Dene</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    paddingHorizontal: 24,
+  },
+  iconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.surface,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: COLORS.error,
+  },
+  icon: {
+    fontSize: 32,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: COLORS.textPrimary,
+    marginBottom: 12,
+  },
+  message: {
+    fontSize: 16,
+    color: COLORS.textSecondary,
+    textAlign: "center",
+    marginBottom: 32,
+    lineHeight: 22,
+  },
+  retryButton: {
+    backgroundColor: COLORS.surface,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  retryText: {
+    color: COLORS.textPrimary,
+    fontWeight: "700",
+    fontSize: 16,
+  },
+});
+</file>
+
+<file path="src/components/PuzzleBoard.tsx">
+import React, { useMemo } from "react";
+import { StyleSheet, View } from "react-native";
+import { BOARD_PADDING, COLORS, TILE_GAP } from "../constants/gameConfig";
+import { useGameStore } from "../store/gameStore";
+import { GridSize, ImageSource } from "../types";
+import Tile from "./Tile";
+
+interface PuzzleBoardProps {
+  grid: number[];
+  gridSize: GridSize;
+  imageSource: ImageSource;
+  onTilePress: (index: number) => void;
+  boardSize?: number;
+}
+
+const PuzzleBoard: React.FC<PuzzleBoardProps> = ({
+  grid,
+  gridSize,
+  imageSource,
+  onTilePress,
+  boardSize: propBoardSize,
+}) => {
+  const boardWidth = propBoardSize ? propBoardSize - BOARD_PADDING * 2 : 340;
+  // Calculate tile size based on width and columns
+  const totalGapX = TILE_GAP * (gridSize.cols - 1);
+  const tileSize = (boardWidth - totalGapX) / gridSize.cols;
+
+  // Calculate height based on rows
+  const totalGapY = TILE_GAP * (gridSize.rows - 1);
+  const boardHeight = tileSize * gridSize.rows + totalGapY;
+
+  const emptyTileValue = gridSize.cols * gridSize.rows - 1;
+  const hintedTiles = useGameStore((state) => state.hintedTiles);
+
+  const tiles = useMemo(() => {
+    return grid.map((value, index) => (
+      <Tile
+        key={value}
+        index={index}
+        value={value}
+        gridSize={gridSize}
+        tileSize={tileSize} // Pass pre-calculated size
+        imageSource={imageSource}
+        isEmpty={value === emptyTileValue}
+        isHinted={hintedTiles.includes(value)}
+        onPress={onTilePress}
+      />
+    ));
+  }, [
+    grid,
+    gridSize,
+    tileSize,
+    imageSource,
+    emptyTileValue,
+    onTilePress,
+    hintedTiles,
+  ]);
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.board, { width: boardWidth, height: boardHeight }]}>
+        {tiles}
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: BOARD_PADDING,
+  },
+  board: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    overflow: "hidden",
+    position: "relative",
+  },
+});
+
+export default PuzzleBoard;
+</file>
+
+<file path="src/components/Tile.tsx">
+import { Image } from "expo-image";
+import React, { memo } from "react";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import { COLORS, TILE_BORDER_RADIUS, TILE_GAP } from "../constants/gameConfig";
+import { GridSize, ImageSource } from "../types";
+import {
+  calculateImageOffset,
+  calculateTilePosition,
+} from "../utils/puzzleLogic";
+
+interface TileProps {
+  index: number;
+  value: number;
+  gridSize: GridSize;
+  tileSize: number;
+  imageSource: ImageSource;
+  isEmpty: boolean;
+  isHinted?: boolean;
+  onPress: (index: number) => void;
+}
+
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
+
+const Tile: React.FC<TileProps> = ({
+  index,
+  value,
+  gridSize,
+  tileSize,
+  imageSource,
+  isEmpty,
+  isHinted,
+  onPress,
+}) => {
+  const position = calculateTilePosition(index, gridSize, tileSize, TILE_GAP);
+  const imageOffset = calculateImageOffset(value, gridSize, tileSize);
+  const scale = useSharedValue(1);
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: withTiming(position.x, { duration: 120 }) },
+      { translateY: withTiming(position.y, { duration: 120 }) },
+      { scale: scale.value },
+    ],
+  }));
+
+  const handlePressIn = () => {
+    scale.value = withTiming(0.95, { duration: 100 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withTiming(1, { duration: 100 });
+  };
+
+  if (isEmpty) return null;
+
+  return (
+    <AnimatedTouchable
+      style={[
+        styles.tileContainer,
+        { width: tileSize, height: tileSize },
+        animatedContainerStyle,
+      ]}
+      onPress={() => onPress(index)}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      activeOpacity={0.9}
+    >
+      <View
+        style={[styles.imageContainer, { borderRadius: TILE_BORDER_RADIUS }]}
+      >
+        <Image
+          source={imageSource}
+          style={[
+            styles.image,
+            {
+              width: gridSize.cols * tileSize + (gridSize.cols - 1) * TILE_GAP, // Approx full image width
+              height: gridSize.rows * tileSize + (gridSize.rows - 1) * TILE_GAP,
+              top: imageOffset.top,
+              left: imageOffset.left,
+            },
+          ]}
+          contentFit="cover"
+          transition={0}
+        />
+      </View>
+      <View
+        style={[
+          styles.borderOverlay,
+          { borderRadius: TILE_BORDER_RADIUS },
+          isHinted && {
+            borderColor: COLORS.accent,
+            borderWidth: 2,
+            shadowColor: COLORS.accent,
+            shadowOpacity: 0.5,
+            shadowRadius: 4,
+            elevation: 5,
+          },
+        ]}
+      />
+    </AnimatedTouchable>
+  );
+};
+
+const styles = StyleSheet.create({
+  tileContainer: { position: "absolute" },
+  imageContainer: { flex: 1, overflow: "hidden" },
+  image: { position: "absolute" },
+  borderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+});
+
+export default memo(Tile, (prev, next) => {
+  return (
+    prev.index === next.index &&
+    prev.value === next.value &&
+    prev.isEmpty === next.isEmpty &&
+    prev.gridSize.cols === next.gridSize.cols &&
+    prev.gridSize.rows === next.gridSize.rows &&
+    prev.tileSize === next.tileSize &&
+    prev.isHinted === next.isHinted
+  );
+});
+</file>
+
+<file path="src/components/WinModal.tsx">
+import React from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, Modal } from 'react-native';
+import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import { COLORS } from '../constants/gameConfig';
+
+interface WinModalProps {
+  visible: boolean;
+  moves: number;
+  stars: number;
+  isLastLevel: boolean;
+  chapterColor?: string;
+  onNextLevel: () => void;
+  onReplay: () => void;
+  onBackToLevels: () => void;
+}
+
+const Star: React.FC<{ filled: boolean; delay: number }> = ({ filled, delay }) => (
+  <Animated.View entering={SlideInDown.delay(delay).springify()}>
+    <Text style={[styles.star, filled && styles.starFilled]}>★</Text>
+  </Animated.View>
+);
+
+const WinModal: React.FC<WinModalProps> = ({
+  visible,
+  moves,
+  stars,
+  isLastLevel,
+  chapterColor,
+  onNextLevel,
+  onReplay,
+  onBackToLevels,
+}) => {
+  const accentColor = chapterColor || COLORS.primary;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+      <View style={styles.overlay}>
+        <Animated.View entering={FadeIn.duration(300)} style={styles.modalContainer}>
+          <Text style={styles.title}>Tebrikler!</Text>
+          <Text style={styles.subtitle}>Bulmacayı Tamamladın</Text>
+
+          <View style={styles.starsContainer}>
+            <Star filled={stars >= 1} delay={100} />
+            <Star filled={stars >= 2} delay={200} />
+            <Star filled={stars >= 3} delay={300} />
+          </View>
+
+          <View style={styles.statsContainer}>
+            <Text style={[styles.statValue, { color: accentColor }]}>{moves}</Text>
+            <Text style={styles.statLabel}>Hamle</Text>
+          </View>
+
+          <View style={styles.buttonsContainer}>
+            {!isLastLevel && (
+              <TouchableOpacity
+                style={[styles.button, styles.primaryButton, { backgroundColor: accentColor }]}
+                onPress={onNextLevel}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.primaryButtonText}>Sonraki Seviye</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={onReplay} activeOpacity={0.8}>
+              <Text style={styles.secondaryButtonText}>Tekrar Oyna</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.button} onPress={onBackToLevels} activeOpacity={0.8}>
+              <Text style={styles.tertiaryButtonText}>Seviyelere Dön</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+};
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: COLORS.overlay,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContainer: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
+    padding: 32,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    marginBottom: 24,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    marginBottom: 24,
+    gap: 8,
+  },
+  star: {
+    fontSize: 44,
+    color: COLORS.starEmpty,
+  },
+  starFilled: {
+    color: COLORS.starFilled,
+  },
+  statsContainer: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  statValue: {
+    fontSize: 40,
+    fontWeight: '700',
+  },
+  statLabel: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  buttonsContainer: {
+    width: '100%',
+    gap: 10,
+  },
+  button: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  primaryButton: {},
+  primaryButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    backgroundColor: COLORS.surfaceLight,
+  },
+  secondaryButtonText: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  tertiaryButtonText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+  },
+});
+
+export default WinModal;
+</file>
+
+<file path="src/constants/gameConfig.ts">
+import { GridSize } from "../types";
+
+export const LEVELS_PER_CHAPTER = 24;
+export const TOTAL_CHAPTERS = 20;
+
+// SHUFFLE_MOVES logic moved to puzzleLogic dynamic calculation
+
+export const getGridSizeForLevel = (levelIndex: number): GridSize => {
+  if (levelIndex <= 8) return { cols: 3, rows: 4 };
+  if (levelIndex <= 16) return { cols: 4, rows: 5 };
+  return { cols: 5, rows: 6 };
+};
+
+export const normalizeGridSize = (
+  size: GridSize | number | undefined
+): GridSize => {
+  if (!size) return { cols: 3, rows: 4 }; // Default to 3x4
+  if (typeof size === "number") {
+    // Legacy mapping: N -> N cols x (N+1) rows (Vertical)
+    return { cols: size, rows: size + 1 };
+  }
+  return size;
+};
+
+// ==========================================
+// RESPONSIVE BREAKPOINTS
+// ==========================================
+
+export const BREAKPOINTS = {
+  phone: 0,
+  tablet: 768,
+  desktop: 1024,
+};
+
+export const getDeviceType = (
+  width: number
+): "phone" | "tablet" | "desktop" => {
+  if (width >= BREAKPOINTS.desktop) return "desktop";
+  if (width >= BREAKPOINTS.tablet) return "tablet";
+  return "phone";
+};
+
+export const getResponsiveValue = <T>(
+  width: number,
+  values: { phone: T; tablet: T; desktop?: T }
+): T => {
+  const type = getDeviceType(width);
+  if (type === "desktop") return values.desktop ?? values.tablet;
+  if (type === "tablet") return values.tablet;
+  return values.phone;
+};
+
+// ==========================================
+// MINIMALIST DARK THEME
+// ==========================================
+
+export const COLORS = {
+  // Backgrounds
+  background: "#121212", // Soft Black
+  surface: "#1e1e1e", // Dark Grey
+  surfaceLight: "#2a2a2a", // Lighter Grey
+  surfaceHover: "#333333",
+
+  // Brand
+  primary: "#3d3d3d", // Neutral Primary
+  primaryDark: "#2d2d2d",
+  primaryLight: "#4d4d4d",
+
+  // Accent (Cyan)
+  accent: "#00f2ff", // Cyan Accent for interactive
+  accentLight: "#33f5ff",
+
+  // Secondary (Pink)
+  secondary: "#ec4899",
+  secondaryLight: "#f472b6",
+
+  // Status
+  success: "#10b981",
+  warning: "#f59e0b",
+  error: "#ef4444",
+
+  // Text
+  textPrimary: "#ffffff",
+  textSecondary: "#b3b3b3",
+  textMuted: "#7a7a7a",
+  textDark: "#334155",
+
+  // Border
+  border: "rgba(255, 255, 255, 0.08)",
+  borderLight: "rgba(255, 255, 255, 0.15)",
+
+  // Stars
+  starFilled: "#ffD700",
+  starEmpty: "#3a3a3a",
+
+  // Overlay
+  overlay: "rgba(0, 0, 0, 0.75)",
+  overlayLight: "rgba(0, 0, 0, 0.5)",
+
+  // Gradients
+  gradientPrimary: ["#3d3d3d", "#1e1e1e"],
+  gradientAccent: ["#00f2ff", "#00b8c2"],
+  gradientSurface: ["#1e1e1e", "#121212"],
+
+  // Shadows
+  shadowColor: "#000000",
+};
+
+// ==========================================
+// UI CONSTANTS
+// ==========================================
+
+export const BOARD_PADDING = 12;
+export const TILE_GAP = 2;
+export const TILE_BORDER_RADIUS = 6;
+
+export const getBoardSize = (screenWidth: number): number => {
+  const maxBoardSize = screenWidth - BOARD_PADDING * 2;
+  return maxBoardSize;
+};
+
+export const getGridColumns = (screenWidth: number): number => {
+  return getResponsiveValue(screenWidth, { phone: 2, tablet: 3, desktop: 4 });
+};
+
+// ==========================================
+// HINT SYSTEM
+// ==========================================
+
+export const HINT_CONFIG = {
+  defaultHints: 10,
+  chapterBonus: 5,
+  rewardedAdHints: 3,
+};
+
+// ==========================================
+// AD CONFIG (Test IDs)
+// ==========================================
+
+export const AD_CONFIG = {
+  interstitial: {
+    android: "ca-app-pub-3940256099942544/1033173712",
+    ios: "ca-app-pub-3940256099942544/4411468910",
+  },
+  rewarded: {
+    android: "ca-app-pub-3940256099942544/5224354917",
+    ios: "ca-app-pub-3940256099942544/1712485313",
+  },
+  banner: {
+    android: "ca-app-pub-3940256099942544/6300978111",
+    ios: "ca-app-pub-3940256099942544/2934735716",
+  },
+};
+
+// ==========================================
+// STORAGE KEYS
+// ==========================================
+
+export const STORAGE_KEYS = {
+  USER_PROGRESS: "@puzzle_game_progress",
+  HINT_COUNT: "@puzzle_game_hints",
+  LAST_PLAYED: "@puzzle_game_last_played",
+  DEVICE_ID: "@puzzle_game_device_id",
+  LEVEL_STATE: "@puzzle_game_level_state",
+};
+
+// CHAPTER DATA handles moved to DataStore/Service
+// generateChapters ve CHAPTERS kaldırıldı.
+
+// ==========================================
+// STAR RATING SYSTEM (Difficulty Based)
+// ==========================================
+
+export const STAR_THRESHOLDS: Record<string, { gold: number; silver: number }> =
+  {
+    "3x3": { gold: 20, silver: 40 },
+    "4x4": { gold: 60, silver: 100 },
+    "5x5": { gold: 120, silver: 200 },
+    "4x6": { gold: 100, silver: 180 },
+  };
+
+export const calculateStars = (moves: number, gridSize: GridSize): number => {
+  const key = `${gridSize.cols}x${gridSize.rows}`;
+  const threshold = STAR_THRESHOLDS[key] || {
+    gold: gridSize.cols * gridSize.rows * 4,
+    silver: gridSize.cols * gridSize.rows * 6,
+  };
+
+  if (moves <= threshold.gold) return 3;
+  if (moves <= threshold.silver) return 2;
+  return 1;
+};
+</file>
+
+<file path="src/hooks/usePuzzleGame.ts">
+import { useCallback, useEffect, useRef } from "react";
+import { AppState, AppStateStatus } from "react-native";
+import { normalizeGridSize } from "../constants/gameConfig";
+import { useGameActions, useGameStore } from "../store/gameStore";
+import { useProgressActions } from "../store/progressStore";
+import { Level } from "../types";
+import { getProgressPercentage } from "../utils/puzzleLogic";
+
+interface UsePuzzleGameOptions {
+  level?: Level;
+  onWin?: (moves: number) => void;
+}
+
+export const usePuzzleGame = ({ level, onWin }: UsePuzzleGameOptions) => {
+  const gameState = useGameStore();
+  const gameActions = useGameActions();
+  const progressActions = useProgressActions();
+  const appState = useRef(AppState.currentState);
+
+  const {
+    currentGrid,
+    emptySlotIndex,
+    moveCount,
+    isSolved,
+    gridSize,
+    isInitialized,
+    hintedTiles,
+  } = gameState;
+
+  // Initialize or Resume
+  useEffect(() => {
+    if (level) {
+      // Prevent ghost wins from previous level interactions
+      gameActions.prepareGame();
+
+      const initOrResume = async () => {
+        const normalizedSize = normalizeGridSize(level.gridSize);
+        const resumed = await gameActions.loadLevelState(
+          level.chapterId,
+          level.id,
+          normalizedSize
+        );
+        if (!resumed) {
+          gameActions.initializeGame(normalizedSize);
+        }
+      };
+      initOrResume();
+    }
+  }, [level?.id, level?.chapterId, level?.gridSize]);
+
+  // Win condition
+  useEffect(() => {
+    if (isSolved && isInitialized) {
+      if (level) {
+        gameActions.clearLevelState(level.chapterId, level.id);
+      }
+      onWin?.(moveCount);
+    }
+  }, [isSolved, isInitialized, moveCount, onWin, level]);
+
+  // Auto-save on AppState change
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (
+        appState.current === "active" &&
+        nextAppState.match(/inactive|background/)
+      ) {
+        // App is going to background, save state
+        if (level && isInitialized && !isSolved) {
+          gameActions.saveLevelState(level.chapterId, level.id);
+        }
+      }
+      appState.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, [level, isInitialized, isSolved, gameActions]);
+
+  const progress = isInitialized ? getProgressPercentage(currentGrid) : 0;
+
+  const handleTilePress = useCallback(
+    (index: number) => {
+      if (isSolved) return;
+      gameActions.moveTile(index);
+    },
+    [isSolved, gameActions]
+  );
+
+  const resetGame = useCallback(() => {
+    if (level) {
+      gameActions.clearLevelState(level.chapterId, level.id);
+    }
+    gameActions.resetGame();
+  }, [gameActions, level]);
+
+  const completeAndSave = useCallback(() => {
+    if (isSolved && level) {
+      progressActions.completeLevel(
+        level.chapterId,
+        level.id,
+        moveCount,
+        normalizeGridSize(level.gridSize)
+      );
+    }
+  }, [isSolved, level, moveCount, progressActions]);
+
+  return {
+    grid: currentGrid,
+    emptySlotIndex,
+    moveCount,
+    isSolved,
+    gridSize: gridSize || normalizeGridSize(level?.gridSize),
+    isInitialized,
+    progress,
+    hintedTiles,
+    handleTilePress,
+    resetGame,
+    useHint: gameActions.useHint,
+    saveState: () =>
+      level && gameActions.saveLevelState(level.chapterId, level.id),
+    completeAndSave,
+  };
+};
+</file>
+
+<file path="src/services/adManager.ts">
+import { Platform } from 'react-native';
+import { AD_CONFIG } from '../constants/gameConfig';
+
+// ==========================================
+// CHECK IF ADMOB IS AVAILABLE
+// ==========================================
+
+let isAdMobAvailable = false;
+let InterstitialAd: any = null;
+let RewardedAd: any = null;
+let AdEventType: any = null;
+let RewardedAdEventType: any = null;
+let TestIds: any = null;
+
+try {
+  const admob = require('react-native-google-mobile-ads');
+  InterstitialAd = admob.InterstitialAd;
+  RewardedAd = admob.RewardedAd;
+  AdEventType = admob.AdEventType;
+  RewardedAdEventType = admob.RewardedAdEventType;
+  TestIds = admob.TestIds;
+  isAdMobAvailable = true;
+  console.log('📺 AdMob module loaded');
+} catch (error) {
+  console.log('📺 AdMob not available (Expo Go or not configured)');
+  isAdMobAvailable = false;
+}
+
+// ==========================================
+// AD UNIT IDS
+// ==========================================
+
+const getInterstitialId = () => {
+  if (__DEV__ && TestIds) return TestIds.INTERSTITIAL;
+  return Platform.OS === 'ios' ? AD_CONFIG.interstitial.ios : AD_CONFIG.interstitial.android;
+};
+
+const getRewardedId = () => {
+  if (__DEV__ && TestIds) return TestIds.REWARDED;
+  return Platform.OS === 'ios' ? AD_CONFIG.rewarded.ios : AD_CONFIG.rewarded.android;
+};
+
+// ==========================================
+// AD INSTANCES
+// ==========================================
+
+let interstitialAd: any = null;
+let rewardedAd: any = null;
+let isInterstitialLoaded = false;
+let isRewardedLoaded = false;
+
+// ==========================================
+// INTERSTITIAL ADS
+// ==========================================
+
+export const loadInterstitial = () => {
+  if (!isAdMobAvailable || !InterstitialAd) {
+    console.log('📺 AdMob not available, skipping interstitial load');
+    return;
+  }
+
+  try {
+    interstitialAd = InterstitialAd.createForAdRequest(getInterstitialId());
+
+    interstitialAd.addAdEventListener(AdEventType.LOADED, () => {
+      isInterstitialLoaded = true;
+      console.log('📺 Interstitial loaded');
+    });
+
+    interstitialAd.addAdEventListener(AdEventType.CLOSED, () => {
+      isInterstitialLoaded = false;
+      loadInterstitial(); // Preload next
+    });
+
+    interstitialAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
+      console.log('📺 Interstitial error:', error);
+      isInterstitialLoaded = false;
+    });
+
+    interstitialAd.load();
+  } catch (error) {
+    console.log('📺 Interstitial init error:', error);
+  }
+};
+
+export const showInterstitial = async (): Promise<boolean> => {
+  if (!isAdMobAvailable || !isInterstitialLoaded || !interstitialAd) {
+    console.log('📺 Interstitial not ready');
+    return false;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      interstitialAd.show();
+      resolve(true);
+    } catch (error) {
+      console.log('📺 Interstitial show error:', error);
+      resolve(false);
+    }
+  });
+};
+
+// ==========================================
+// REWARDED ADS
+// ==========================================
+
+export const loadRewarded = () => {
+  if (!isAdMobAvailable || !RewardedAd) {
+    console.log('📺 AdMob not available, skipping rewarded load');
+    return;
+  }
+
+  try {
+    rewardedAd = RewardedAd.createForAdRequest(getRewardedId());
+
+    rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+      isRewardedLoaded = true;
+      console.log('🎁 Rewarded loaded');
+    });
+
+    rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+      console.log('🎁 Reward earned');
+    });
+
+    rewardedAd.addAdEventListener(AdEventType.CLOSED, () => {
+      isRewardedLoaded = false;
+      loadRewarded(); // Preload next
+    });
+
+    rewardedAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
+      console.log('🎁 Rewarded error:', error);
+      isRewardedLoaded = false;
+    });
+
+    rewardedAd.load();
+  } catch (error) {
+    console.log('🎁 Rewarded init error:', error);
+  }
+};
+
+export const showRewarded = (): Promise<boolean> => {
+  if (!isAdMobAvailable || !isRewardedLoaded || !rewardedAd) {
+    console.log('🎁 Rewarded not ready');
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    const unsubscribeReward = rewardedAd.addAdEventListener(
+      RewardedAdEventType.EARNED_REWARD,
+      () => {
+        unsubscribeReward();
+        resolve(true);
+      }
+    );
+
+    const unsubscribeClose = rewardedAd.addAdEventListener(AdEventType.CLOSED, () => {
+      unsubscribeClose();
+    });
+
+    const unsubscribeError = rewardedAd.addAdEventListener(AdEventType.ERROR, () => {
+      unsubscribeError();
+      resolve(false);
+    });
+
+    try {
+      rewardedAd.show();
+    } catch (error) {
+      console.log('🎁 Rewarded show error:', error);
+      resolve(false);
+    }
+  });
+};
+
+// ==========================================
+// INITIALIZATION
+// ==========================================
+
+export const initializeAds = () => {
+  if (!isAdMobAvailable) {
+    console.log('📺 AdMob not available, skipping initialization');
+    return;
+  }
+
+  console.log('📺 Initializing ads...');
+  loadInterstitial();
+  loadRewarded();
+};
+
+export const isInterstitialReady = () => isAdMobAvailable && isInterstitialLoaded;
+export const isRewardedReady = () => isAdMobAvailable && isRewardedLoaded;
+</file>
+
+<file path="src/services/authService.ts">
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  User,
+} from "firebase/auth";
+import { auth } from "../../firebaseConfig";
+import { getDeviceId } from "./deviceService";
+
+export const loginWithDevice = async (): Promise<User | null> => {
+  const deviceId = await getDeviceId();
+  const email = `${deviceId}@puzzle.game`;
+  const password = `pass_${deviceId.slice(0, 8)}!`; // Cihaza özel sabit şifre
+
+  try {
+    // Giriş yapmayı dene
+    const userCredential = await signInWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
+    console.log("🔐 Firebase: Giriş başarılı", userCredential.user.uid);
+    return userCredential.user;
+  } catch (error: any) {
+    // Eğer kullanıcı yoksa yeni oluştur
+    if (
+      error.code === "auth/user-not-found" ||
+      error.code === "auth/invalid-credential"
+    ) {
+      try {
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          email,
+          password
+        );
+        console.log(
+          "🔐 Firebase: Yeni kullanıcı oluşturuldu",
+          userCredential.user.uid
+        );
+        return userCredential.user;
+      } catch (createError) {
+        console.error("🔐 Firebase: Kayıt hatası", createError);
+        return null;
+      }
+    }
+    console.error("🔐 Firebase: Auth hatası", error);
+    return null;
+  }
+};
+
+export const getCurrentUser = (): User | null => auth.currentUser;
+
+export const subscribeToAuthChanges = (
+  callback: (user: User | null) => void
+) => {
+  return onAuthStateChanged(auth, callback);
+};
+</file>
+
+<file path="src/services/dataService.ts">
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+} from "firebase/firestore";
+import { db } from "../../firebaseConfig";
+import { Chapter, Level } from "../types";
+
+export const fetchChapters = async (): Promise<Chapter[]> => {
+  try {
+    const chaptersCol = collection(db, "chapters");
+    const q = query(chaptersCol, orderBy("id", "asc"));
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs.map(
+      (doc) =>
+        ({
+          ...doc.data(),
+        } as Chapter)
+    );
+  } catch (error) {
+    console.error("Bölümler çekilirken hata oluştu:", error);
+    return [];
+  }
+};
+
+export const fetchLevels = async (chapterId: number): Promise<Level[]> => {
+  try {
+    const levelsCol = collection(
+      db,
+      "chapters",
+      chapterId.toString(),
+      "levels"
+    );
+    const q = query(levelsCol, orderBy("id", "asc"));
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs.map(
+      (doc) =>
+        ({
+          ...doc.data(),
+        } as Level)
+    );
+  } catch (error) {
+    console.error("Seviyeler çekilirken hata oluştu:", error);
+    return [];
+  }
+};
+
+export const fetchLevelDetails = async (
+  chapterId: number,
+  levelId: number
+): Promise<Level | null> => {
+  try {
+    const levelDoc = await getDoc(
+      doc(db, "chapters", chapterId.toString(), "levels", levelId.toString())
+    );
+    if (levelDoc.exists()) {
+      return levelDoc.data() as Level;
+    }
+    return null;
+  } catch (error) {
+    console.error("Seviye detayı çekilirken hata oluştu:", error);
+    return null;
+  }
+};
+</file>
+
+<file path="src/services/deviceService.ts">
+import * as Application from 'expo-application';
+import { Platform } from 'react-native';
+
+let cachedDeviceId: string | null = null;
+
+export const getDeviceId = async (): Promise<string> => {
+  if (cachedDeviceId) return cachedDeviceId;
+
+  try {
+    if (Platform.OS === 'android') {
+      cachedDeviceId = Application.getAndroidId() || 'unknown-android';
+    } else if (Platform.OS === 'ios') {
+      cachedDeviceId = await Application.getIosIdForVendorAsync() || 'unknown-ios';
+    } else {
+      // Web fallback
+      cachedDeviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+  } catch (error) {
+    cachedDeviceId = `fallback-${Date.now()}`;
+  }
+
+  console.log('📱 Device ID:', cachedDeviceId);
+  return cachedDeviceId;
+};
+
+export const getAppInfo = () => {
+  return {
+    name: Application.applicationName,
+    version: Application.nativeApplicationVersion,
+    buildVersion: Application.nativeBuildVersion,
+  };
+};
+</file>
+
+<file path="src/store/dataStore.ts">
+import { create } from "zustand";
+import { fetchChapters, fetchLevels } from "../services/dataService";
+import { Chapter, Level } from "../types";
+
+interface DataState {
+  chapters: Chapter[];
+  levelsCache: Record<number, Level[]>; // chapterId -> Level[]
+  isLoading: boolean;
+}
+
+interface DataActions {
+  getChapters: () => Promise<Chapter[]>;
+  getLevels: (chapterId: number) => Promise<Level[]>;
+  getChapterById: (id: number) => Chapter | undefined;
+  getLevelById: (
+    chapterId: number,
+    levelId: number
+  ) => Promise<Level | undefined>;
+}
+
+interface DataStore extends DataState {
+  actions: DataActions;
+}
+
+export const useDataStore = create<DataStore>((set, get) => ({
+  chapters: [],
+  levelsCache: {},
+  isLoading: false,
+
+  actions: {
+    getChapters: async () => {
+      const { chapters } = get();
+      if (chapters.length > 0) return chapters;
+
+      set({ isLoading: true });
+      const fetchedChapters = await fetchChapters();
+      set({ chapters: fetchedChapters, isLoading: false });
+      return fetchedChapters;
+    },
+
+    getLevels: async (chapterId: number) => {
+      const { levelsCache } = get();
+      if (levelsCache[chapterId]) return levelsCache[chapterId];
+
+      set({ isLoading: true });
+      const fetchedLevels = await fetchLevels(chapterId);
+      set((state) => ({
+        levelsCache: { ...state.levelsCache, [chapterId]: fetchedLevels },
+        isLoading: false,
+      }));
+      return fetchedLevels;
+    },
+
+    getChapterById: (id: number) => {
+      return get().chapters.find((c) => c.id === id);
+    },
+
+    getLevelById: async (chapterId: number, levelId: number) => {
+      const levels = await get().actions.getLevels(chapterId);
+      return levels.find((l) => l.id === levelId);
+    },
+  },
+}));
+
+export const useChapters = () => useDataStore((state) => state.chapters);
+export const useDataActions = () => useDataStore((state) => state.actions);
+export const useIsDataLoading = () => useDataStore((state) => state.isLoading);
+</file>
+
+<file path="src/store/gameStore.ts">
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { create } from "zustand";
+import { STORAGE_KEYS } from "../constants/gameConfig";
+import { GridSize } from "../types";
+import { isSolved, performMove, shuffleGrid } from "../utils/puzzleLogic";
+
+interface GameState {
+  currentGrid: number[];
+  emptySlotIndex: number;
+  moveCount: number;
+  isSolved: boolean;
+  gridSize: GridSize;
+  isInitialized: boolean;
+  hintedTiles: number[];
+}
+
+interface GameActions {
+  initializeGame: (gridSize: GridSize) => void;
+  loadLevelState: (
+    chapterId: number,
+    levelId: number,
+    gridSize: GridSize
+  ) => Promise<boolean>;
+  saveLevelState: (chapterId: number, levelId: number) => Promise<void>;
+  clearLevelState: (chapterId: number, levelId: number) => Promise<void>;
+  prepareGame: () => void;
+  moveTile: (index: number) => boolean;
+  resetGame: () => void;
+  useHint: () => void;
+}
+
+interface GameStore extends GameState {
+  actions: GameActions;
+}
+
+const initialState: GameState = {
+  currentGrid: [],
+  emptySlotIndex: -1,
+  moveCount: 0,
+  isSolved: false,
+  gridSize: { cols: 3, rows: 3 },
+  isInitialized: false,
+  hintedTiles: [],
+};
+
+const getLevelStateKey = (chapterId: number, levelId: number) =>
+  `${STORAGE_KEYS.LEVEL_STATE}_${chapterId}_${levelId}`;
+
+export const useGameStore = create<GameStore>((set, get) => ({
+  ...initialState,
+
+  actions: {
+    initializeGame: (gridSize: GridSize) => {
+      const { grid, emptyIndex } = shuffleGrid(gridSize);
+      set({
+        currentGrid: grid,
+        emptySlotIndex: emptyIndex,
+        moveCount: 0,
+        isSolved: false,
+        gridSize,
+        isInitialized: true,
+        hintedTiles: [],
+      });
+    },
+
+    loadLevelState: async (
+      chapterId: number,
+      levelId: number,
+      gridSize: GridSize
+    ) => {
+      try {
+        const key = getLevelStateKey(chapterId, levelId);
+        const stored = await AsyncStorage.getItem(key);
+        if (stored) {
+          const data = JSON.parse(stored);
+          const totalTiles = gridSize.cols * gridSize.rows;
+          // Validate stored grid matches current level dimensions
+          if (data.grid.length === totalTiles) {
+            set({
+              currentGrid: data.grid,
+              emptySlotIndex: data.emptyIndex,
+              moveCount: data.moves,
+              isSolved: isSolved(data.grid),
+              gridSize,
+              isInitialized: true,
+              hintedTiles: data.hintedTiles || [],
+            });
+            return true;
+          }
+        }
+      } catch (e) {
+        console.error("Level state yüklenirken hata:", e);
+      }
+      return false;
+    },
+
+    saveLevelState: async (chapterId: number, levelId: number) => {
+      const state = get();
+      if (!state.isInitialized || state.isSolved) return;
+
+      try {
+        const key = getLevelStateKey(chapterId, levelId);
+        const data = {
+          grid: state.currentGrid,
+          emptyIndex: state.emptySlotIndex,
+          moves: state.moveCount,
+          hintedTiles: state.hintedTiles,
+        };
+        await AsyncStorage.setItem(key, JSON.stringify(data));
+      } catch (e) {
+        console.error("Level state kaydedilirken hata:", e);
+      }
+    },
+
+    clearLevelState: async (chapterId: number, levelId: number) => {
+      try {
+        const key = getLevelStateKey(chapterId, levelId);
+        await AsyncStorage.removeItem(key);
+      } catch (e) {
+        console.error("Level state silinirken hata:", e);
+      }
+    },
+
+    prepareGame: () => {
+      set({
+        isSolved: false,
+        isInitialized: false,
+        moveCount: 0,
+        hintedTiles: [],
+        emptySlotIndex: -1,
+        currentGrid: [],
+      });
+    },
+
+    moveTile: (index: number) => {
+      const state = get();
+      if (!state.isInitialized || state.isSolved) return false;
+
+      const result = performMove(
+        state.currentGrid,
+        index,
+        state.emptySlotIndex,
+        state.gridSize
+      );
+
+      if (result.moved) {
+        const solved = isSolved(result.grid);
+        set({
+          currentGrid: result.grid,
+          emptySlotIndex: result.emptyIndex,
+          moveCount: state.moveCount + 1,
+          isSolved: solved,
+        });
+      }
+
+      return result.moved;
+    },
+
+    resetGame: () => {
+      const state = get();
+      if (!state.isInitialized) return;
+
+      const { grid, emptyIndex } = shuffleGrid(state.gridSize);
+      set({
+        currentGrid: grid,
+        emptySlotIndex: emptyIndex,
+        moveCount: 0,
+        isSolved: false,
+        hintedTiles: [],
+      });
+    },
+
+    useHint: () => {
+      const state = get();
+      if (!state.isInitialized || state.isSolved) return;
+
+      const grid = [...state.currentGrid];
+      const emptyTileValue = state.gridSize.cols * state.gridSize.rows - 1;
+
+      let targetIndex = -1;
+      for (let i = 0; i < grid.length; i++) {
+        if (grid[i] !== i && i !== emptyTileValue) {
+          targetIndex = i;
+          break;
+        }
+      }
+
+      if (targetIndex === -1) return;
+
+      const tileValue = targetIndex;
+      const currentIndex = grid.indexOf(tileValue);
+
+      [grid[targetIndex], grid[currentIndex]] = [
+        grid[currentIndex],
+        grid[targetIndex],
+      ];
+
+      let newEmptyIndex = state.emptySlotIndex;
+      if (targetIndex === state.emptySlotIndex) {
+        newEmptyIndex = currentIndex;
+      } else if (currentIndex === state.emptySlotIndex) {
+        newEmptyIndex = targetIndex;
+      }
+
+      set({
+        currentGrid: grid,
+        emptySlotIndex: newEmptyIndex,
+        hintedTiles: [...state.hintedTiles, tileValue],
+        isSolved: isSolved(grid),
+      });
+    },
+  },
+}));
+
+export const useGameActions = () => useGameStore((state) => state.actions);
+</file>
+
+<file path="src/store/hintStore.ts">
+import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS, HINT_CONFIG } from '../constants/gameConfig';
+
+interface HintState {
+  hintCount: number;
+  isLoaded: boolean;
+}
+
+interface HintActions {
+  loadHints: () => Promise<void>;
+  saveHints: () => Promise<void>;
+  useHint: () => boolean;
+  addHints: (amount: number) => void;
+  addChapterBonus: () => void;
+  resetHints: () => void;
+}
+
+interface HintStore extends HintState {
+  actions: HintActions;
+}
+
+export const useHintStore = create<HintStore>((set, get) => ({
+  hintCount: HINT_CONFIG.defaultHints,
+  isLoaded: false,
+
+  actions: {
+    loadHints: async () => {
+      try {
+        const stored = await AsyncStorage.getItem(STORAGE_KEYS.HINT_COUNT);
+        if (stored) {
+          set({ hintCount: parseInt(stored, 10), isLoaded: true });
+        } else {
+          set({ isLoaded: true });
+        }
+      } catch {
+        set({ isLoaded: true });
+      }
+    },
+
+    saveHints: async () => {
+      try {
+        const { hintCount } = get();
+        await AsyncStorage.setItem(STORAGE_KEYS.HINT_COUNT, hintCount.toString());
+      } catch {}
+    },
+
+    useHint: () => {
+      const { hintCount } = get();
+      if (hintCount <= 0) return false;
+
+      set({ hintCount: hintCount - 1 });
+      get().actions.saveHints();
+      return true;
+    },
+
+    addHints: (amount: number) => {
+      const { hintCount } = get();
+      set({ hintCount: hintCount + amount });
+      get().actions.saveHints();
+    },
+
+    addChapterBonus: () => {
+      get().actions.addHints(HINT_CONFIG.chapterBonus);
+    },
+
+    resetHints: () => {
+      set({ hintCount: HINT_CONFIG.defaultHints });
+      get().actions.saveHints();
+    },
+  },
+}));
+
+export const useHintCount = () => useHintStore((state) => state.hintCount);
+export const useHintActions = () => useHintStore((state) => state.actions);
+</file>
+
+<file path="src/store/progressStore.ts">
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { create } from "zustand";
+import { auth, db } from "../../firebaseConfig";
+import {
+  calculateStars,
+  LEVELS_PER_CHAPTER,
+  STORAGE_KEYS,
+} from "../constants/gameConfig";
+import { GridSize, LevelProgress, UserProgress } from "../types";
+
+interface ProgressState {
+  progress: UserProgress;
+  isLoaded: boolean;
+}
+
+interface ProgressActions {
+  loadProgress: () => Promise<void>;
+  saveProgress: () => Promise<void>;
+  completeLevel: (
+    chapterId: number,
+    levelId: number,
+    moves: number,
+    gridSize: GridSize
+  ) => void;
+  setLastPlayed: (chapterId: number, levelId: number) => void;
+  isLevelUnlocked: (chapterId: number, levelId: number) => boolean;
+  isChapterUnlocked: (chapterId: number) => boolean;
+  getLevelProgress: (
+    chapterId: number,
+    levelId: number
+  ) => LevelProgress | null;
+  getChapterProgress: (chapterId: number) => {
+    completed: number;
+    total: number;
+    stars: number;
+  };
+  getLastPlayed: () => { chapterId: number; levelId: number } | null;
+}
+
+interface ProgressStore extends ProgressState {
+  actions: ProgressActions;
+}
+
+const createInitialProgress = (): UserProgress => ({
+  unlockedChapters: [1],
+  completedLevels: {},
+  totalStars: 0,
+  lastPlayed: undefined,
+});
+
+const getLevelKey = (chapterId: number, levelId: number): string =>
+  `${chapterId}-${levelId}`;
+
+export const useProgressStore = create<ProgressStore>((set, get) => ({
+  progress: createInitialProgress(),
+  isLoaded: false,
+
+  actions: {
+    loadProgress: async () => {
+      try {
+        const stored = await AsyncStorage.getItem(STORAGE_KEYS.USER_PROGRESS);
+        if (stored) {
+          set({ progress: JSON.parse(stored), isLoaded: true });
+        }
+
+        const currentUser = auth?.currentUser;
+        if (currentUser) {
+          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+          if (userDoc.exists()) {
+            const cloudData = userDoc.data();
+            // Ensure we handle potentially missing or malformed progress field
+            const cloudProgress = (cloudData?.progress ||
+              createInitialProgress()) as UserProgress;
+
+            // Basic validation to ensure we don't wipe local state with empty cloud state if cloud is empty
+            // But here we trust cloud if it has data.
+            // Check if cloud has meaningful data (e.g. at least one level unlocked/completed)
+            if (
+              cloudProgress.completedLevels &&
+              Object.keys(cloudProgress.completedLevels).length > 0
+            ) {
+              set({ progress: cloudProgress, isLoaded: true });
+              await AsyncStorage.setItem(
+                STORAGE_KEYS.USER_PROGRESS,
+                JSON.stringify(cloudProgress)
+              );
+            } else if (stored) {
+              // Fallback to local if cloud is empty but local has data?
+              // Takes care of newly created cloud docs vs active local user.
+              // For now, let's just stick to "Cloud wins if valid".
+            }
+          }
+        }
+        set({ isLoaded: true });
+      } catch (error) {
+        console.error("Progress yükleme hatası:", error);
+        set({ isLoaded: true });
+      }
+    },
+
+    // saveProgress removed - dangerous as it overwrites entire object
+
+    completeLevel: async (
+      chapterId: number,
+      levelId: number,
+      moves: number,
+      gridSize: GridSize
+    ) => {
+      const { progress } = get();
+      const levelKey = getLevelKey(chapterId, levelId);
+      const stars = calculateStars(moves, gridSize);
+      const existingProgress = progress.completedLevels[levelKey];
+
+      const newLevelProgress: LevelProgress = {
+        completed: true,
+        bestMoves: existingProgress
+          ? Math.min(existingProgress.bestMoves, moves)
+          : moves,
+        stars: existingProgress
+          ? Math.max(existingProgress.stars, stars)
+          : stars,
+      };
+
+      const starDiff = newLevelProgress.stars - (existingProgress?.stars || 0);
+
+      let newChapterUnlocked = false;
+      let nextChapterId = chapterId + 1;
+
+      let newProgress = {
+        ...progress,
+        completedLevels: {
+          ...progress.completedLevels,
+          [levelKey]: newLevelProgress,
+        },
+        totalStars: progress.totalStars + starDiff,
+      };
+
+      if (
+        levelId === LEVELS_PER_CHAPTER &&
+        !progress.unlockedChapters.includes(nextChapterId)
+      ) {
+        newProgress.unlockedChapters = [
+          ...newProgress.unlockedChapters,
+          nextChapterId,
+        ].sort((a, b) => a - b);
+        newChapterUnlocked = true;
+      }
+
+      // Update Local State
+      set({ progress: newProgress });
+      // Update Local Storage
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.USER_PROGRESS,
+        JSON.stringify(newProgress)
+      );
+
+      // Update Cloud (Granular)
+      const user = auth.currentUser;
+      if (user) {
+        try {
+          // Use dot notation to update ONLY this specific level
+          // to avoid overwriting other levels if race condition occurs
+          const updates: any = {
+            [`progress.completedLevels.${levelKey}`]: newLevelProgress,
+            "progress.totalStars": newProgress.totalStars,
+            lastUpdated: new Date().toISOString(),
+          };
+
+          if (newChapterUnlocked) {
+            updates["progress.unlockedChapters"] = newProgress.unlockedChapters;
+          }
+
+          // Use updateDoc instead of setDoc(..., {merge: true})
+          // setDoc with merge:true on nested map fields creates REPLACEMENTS
+          // unless you used dot notation there too. updateDoc is cleaner for this intent.
+          // Note: updateDoc fails if doc doesn't exist, so we might need setDoc for initial creation
+          // but user should be created on auth.
+
+          await setDoc(doc(db, "users", user.uid), updates, { merge: true });
+        } catch (e) {
+          console.error("Cloud level save error:", e);
+        }
+      }
+    },
+
+    setLastPlayed: async (chapterId: number, levelId: number) => {
+      const { progress } = get();
+      const lastPlayed = { chapterId, levelId };
+      const newProgress = { ...progress, lastPlayed };
+
+      set({ progress: newProgress });
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.USER_PROGRESS,
+        JSON.stringify(newProgress)
+      );
+
+      const user = auth.currentUser;
+      if (user) {
+        try {
+          await setDoc(
+            doc(db, "users", user.uid),
+            {
+              "progress.lastPlayed": lastPlayed,
+              lastUpdated: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        } catch (e) {
+          console.error("Last played save error:", e);
+        }
+      }
+    },
+
+    isLevelUnlocked: (chapterId: number, levelId: number) => {
+      const { progress } = get();
+      if (!progress.unlockedChapters.includes(chapterId)) return false;
+      if (levelId === 1) return true;
+      const prevLevelKey = getLevelKey(chapterId, levelId - 1);
+      return progress.completedLevels[prevLevelKey]?.completed ?? false;
+    },
+
+    isChapterUnlocked: (chapterId: number) => {
+      return get().progress.unlockedChapters.includes(chapterId);
+    },
+
+    getLevelProgress: (chapterId: number, levelId: number) => {
+      return (
+        get().progress.completedLevels[getLevelKey(chapterId, levelId)] ?? null
+      );
+    },
+
+    getChapterProgress: (chapterId: number) => {
+      const { progress } = get();
+      let completed = 0;
+      let stars = 0;
+
+      for (let i = 1; i <= LEVELS_PER_CHAPTER; i++) {
+        const levelProgress =
+          progress.completedLevels[getLevelKey(chapterId, i)];
+        if (levelProgress?.completed) {
+          completed++;
+          stars += levelProgress.stars;
+        }
+      }
+
+      return { completed, total: LEVELS_PER_CHAPTER, stars };
+    },
+
+    getLastPlayed: () => {
+      const { progress } = get();
+      return progress.lastPlayed ?? null;
+    },
+
+    // Kept for interface compatibility but warns
+    saveProgress: async () => {
+      console.warn(
+        "Generic saveProgress is deprecated to prevent data loss. Use granular actions."
+      );
+    },
+  },
+}));
+
+export const useProgressActions = () =>
+  useProgressStore((state) => state.actions);
+export const useTotalStars = () =>
+  useProgressStore((state) => state.progress.totalStars);
+export const useLastPlayed = () =>
+  useProgressStore((state) => state.progress.lastPlayed);
+</file>
+
+<file path="src/types/index.ts">
+import { ImageSourcePropType } from "react-native";
+
+export type ImageSource = ImageSourcePropType | { uri: string };
+export type GridSize = { cols: number; rows: number };
+
+export interface Level {
+  id: number;
+  chapterId: number;
+  gridSize: GridSize;
+  imageSource: ImageSource;
+}
+
+export interface Chapter {
+  id: number;
+  name: string;
+  description: string;
+  thumbnail: ImageSource;
+  levels: Level[];
+  color?: string;
+}
+
+export interface LevelProgress {
+  completed: boolean;
+  bestMoves: number;
+  stars: number;
+}
+
+export interface UserProgress {
+  unlockedChapters: number[];
+  completedLevels: Record<string, LevelProgress>;
+  totalStars: number;
+  lastPlayed?: {
+    chapterId: number;
+    levelId: number;
+  };
+}
+
+export interface TilePosition {
+  row: number;
+  col: number;
+}
+
+export interface HintState {
+  count: number;
+  lastUpdated: number;
+}
+</file>
+
+<file path="src/utils/puzzleLogic.ts">
+import { GridSize, TilePosition } from "../types";
+
+export const createSolvedGrid = (gridSize: GridSize): number[] => {
+  const totalTiles = gridSize.cols * gridSize.rows;
+  return Array.from({ length: totalTiles }, (_, i) => i);
+};
+
+export const indexToPosition = (
+  index: number,
+  gridSize: GridSize
+): TilePosition => ({
+  row: Math.floor(index / gridSize.cols),
+  col: index % gridSize.cols,
+});
+
+export const positionToIndex = (
+  position: TilePosition,
+  gridSize: GridSize
+): number => {
+  return position.row * gridSize.cols + position.col;
+};
+
+export const getAdjacentIndices = (
+  index: number,
+  gridSize: GridSize
+): number[] => {
+  const { row, col } = indexToPosition(index, gridSize);
+  const adjacent: number[] = [];
+
+  if (row > 0) adjacent.push(positionToIndex({ row: row - 1, col }, gridSize));
+  if (row < gridSize.rows - 1)
+    adjacent.push(positionToIndex({ row: row + 1, col }, gridSize));
+  if (col > 0) adjacent.push(positionToIndex({ row, col: col - 1 }, gridSize));
+  if (col < gridSize.cols - 1)
+    adjacent.push(positionToIndex({ row, col: col + 1 }, gridSize));
+
+  return adjacent;
+};
+
+export const canMoveTile = (
+  tileIndex: number,
+  emptyIndex: number,
+  gridSize: GridSize
+): boolean => {
+  return getAdjacentIndices(emptyIndex, gridSize).includes(tileIndex);
+};
+
+export const swapTiles = (
+  grid: number[],
+  index1: number,
+  index2: number
+): number[] => {
+  const newGrid = [...grid];
+  [newGrid[index1], newGrid[index2]] = [newGrid[index2], newGrid[index1]];
+  return newGrid;
+};
+
+export const performMove = (
+  grid: number[],
+  tileIndex: number,
+  emptyIndex: number,
+  gridSize: GridSize
+): { grid: number[]; emptyIndex: number; moved: boolean } => {
+  if (!canMoveTile(tileIndex, emptyIndex, gridSize)) {
+    return { grid, emptyIndex, moved: false };
+  }
+  const newGrid = swapTiles(grid, tileIndex, emptyIndex);
+  return { grid: newGrid, emptyIndex: tileIndex, moved: true };
+};
+
+export const shuffleGrid = (
+  gridSize: GridSize
+): { grid: number[]; emptyIndex: number } => {
+  let grid = createSolvedGrid(gridSize);
+  const totalTiles = gridSize.cols * gridSize.rows;
+  let emptyIndex = totalTiles - 1;
+  const moves = totalTiles * 5; // Dynamic shuffle count
+  let lastMove = -1;
+
+  for (let i = 0; i < moves; i++) {
+    const adjacent = getAdjacentIndices(emptyIndex, gridSize);
+    const validMoves = adjacent.filter((idx) => idx !== lastMove);
+    const randomIndex = Math.floor(Math.random() * validMoves.length);
+    const tileToMove = validMoves[randomIndex];
+    lastMove = emptyIndex;
+    grid = swapTiles(grid, tileToMove, emptyIndex);
+    emptyIndex = tileToMove;
+  }
+
+  return { grid, emptyIndex };
+};
+
+export const isSolved = (grid: number[]): boolean => {
+  for (let i = 0; i < grid.length; i++) {
+    if (grid[i] !== i) return false;
+  }
+  return true;
+};
+
+export const getProgressPercentage = (grid: number[]): number => {
+  let correct = 0;
+  for (let i = 0; i < grid.length; i++) {
+    if (grid[i] === i) correct++;
+  }
+  return Math.round((correct / grid.length) * 100);
+};
+
+export const calculateTilePosition = (
+  index: number,
+  gridSize: GridSize,
+  tileSize: number,
+  gap: number
+): { x: number; y: number } => {
+  const { row, col } = indexToPosition(index, gridSize);
+  return {
+    x: col * (tileSize + gap),
+    y: row * (tileSize + gap),
+  };
+};
+
+export const calculateImageOffset = (
+  tileValue: number,
+  gridSize: GridSize,
+  tileSize: number
+): { top: number; left: number } => {
+  const { row, col } = indexToPosition(tileValue, gridSize);
+  return {
+    top: -(row * tileSize),
+    left: -(col * tileSize),
+  };
+};
+</file>
+
+<file path=".gitignore">
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+</file>
+
+<file path="app.json">
+{
+  "expo": {
+    "name": "Puzzle Game",
+    "slug": "puzzle-game",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "puzzlegame",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0f"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.eoist.puzzlegame"
+    },
+    "android": {
+      "package": "com.eoist.puzzlegame",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0a0a0f"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0"
+          },
+          "ios": {
+            "deploymentTarget": "15.1",
+            "useFrameworks": "static"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
+</file>
+
+<file path="app/_layout.tsx">
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
+import { useCallback, useEffect, useState } from "react";
+import { StyleSheet, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import DevPanel from "../src/components/DevPanel";
+import { COLORS } from "../src/constants/gameConfig";
+import { initializeAds } from "../src/services/adManager";
+import { loginWithDevice } from "../src/services/authService";
+import { getDeviceId } from "../src/services/deviceService";
+import { useHintActions } from "../src/store/hintStore";
+import { useProgressActions } from "../src/store/progressStore";
+
+const __DEV_MODE__ = true;
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      staleTime: 1000 * 60 * 60 * 24, // 24 hours (Aggressive caching for offline)
+      gcTime: 1000 * 60 * 60 * 24 * 2, // 48 hours
+    },
+  },
+});
+
+const asyncStoragePersister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+});
+
+SplashScreen.preventAutoHideAsync();
+
+export default function RootLayout() {
+  const [appIsReady, setAppIsReady] = useState(false);
+  const progressActions = useProgressActions();
+  const hintActions = useHintActions();
+
+  useEffect(() => {
+    async function prepare() {
+      try {
+        const deviceId = await getDeviceId();
+        console.log("🚀 App starting with device:", deviceId);
+
+        await progressActions.loadProgress();
+        await hintActions.loadHints();
+        await loginWithDevice();
+
+        try {
+          initializeAds();
+        } catch (error) {
+          console.log("📺 Ad initialization skipped:", error);
+        }
+      } catch (e) {
+        console.warn("App init error:", e);
+      } finally {
+        setAppIsReady(true);
+      }
+    }
+
+    prepare();
+  }, []);
+
+  const onLayoutRootView = useCallback(async () => {
+    if (appIsReady) {
+      await SplashScreen.hideAsync();
+    }
+  }, [appIsReady]);
+
+  if (!appIsReady) {
+    return null;
+  }
+
+  return (
+    <SafeAreaProvider>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{ persister: asyncStoragePersister }}
+      >
+        <View style={styles.container} onLayout={onLayoutRootView}>
+          <StatusBar style="light" />
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: COLORS.surface },
+              headerTintColor: COLORS.textPrimary,
+              headerTitleStyle: { fontWeight: "600" },
+              contentStyle: { backgroundColor: COLORS.background },
+              animation: "slide_from_right",
+              headerShadowVisible: false,
+            }}
+          />
+          {__DEV_MODE__ && <DevPanel />}
+        </View>
+      </PersistQueryClientProvider>
+    </SafeAreaProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.background },
+});
+</file>
+
+<file path="package.json">
+{
+  "name": "puzzle-game",
+  "main": "expo-router/entry",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/netinfo": "^11.4.1",
+    "@react-navigation/native": "^7.1.8",
+    "@tanstack/query-async-storage-persister": "^5.90.20",
+    "@tanstack/react-query": "^5.90.18",
+    "@tanstack/react-query-persist-client": "^5.90.20",
+    "expo": "~54.0.31",
+    "expo-application": "~7.0.8",
+    "expo-build-properties": "~1.0.10",
+    "expo-constants": "~18.0.13",
+    "expo-font": "~14.0.10",
+    "expo-image": "~3.0.11",
+    "expo-linking": "~8.0.11",
+    "expo-router": "~6.0.21",
+    "expo-splash-screen": "~31.0.13",
+    "expo-status-bar": "~3.0.9",
+    "expo-web-browser": "~15.0.10",
+    "firebase": "^12.8.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-google-mobile-ads": "^16.0.1",
+    "react-native-reanimated": "~4.1.1",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "react-native-web": "~0.21.0",
+    "react-native-worklets": "0.5.1",
+    "zustand": "^5.0.10"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "react-test-renderer": "19.1.0",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}
+</file>
+
+<file path="tsconfig.json">
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"]
+}
+</file>
+
+</files>

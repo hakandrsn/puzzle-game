@@ -1,59 +1,125 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
+import { useCallback, useEffect, useState } from "react";
+import { StyleSheet, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import DevPanel from "../src/components/DevPanel";
+import { COLORS } from "../src/constants/gameConfig";
+import { initializeAds } from "../src/services/adManager";
+import { loginWithDevice } from "../src/services/authService";
+import { getDeviceId } from "../src/services/deviceService";
+import { useHintActions } from "../src/store/hintStore";
+import { useProgressActions } from "../src/store/progressStore";
 
-import { useColorScheme } from '@/components/useColorScheme';
+const __DEV_MODE__ = true;
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      staleTime: 1000 * 60 * 60 * 24, // 24 hours (Aggressive caching for offline)
+      gcTime: 1000 * 60 * 60 * 24 * 2, // 48 hours
+    },
+  },
+});
 
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
-};
+const asyncStoragePersister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+});
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-    ...FontAwesome.font,
-  });
-
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
+  const [appIsReady, setAppIsReady] = useState(false);
+  const progressActions = useProgressActions();
+  const hintActions = useHintActions();
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
+    async function prepare() {
+      try {
+        const deviceId = await getDeviceId();
+        console.log("🚀 App starting with device:", deviceId);
+
+        // CRITICAL: Login FIRST so auth.currentUser is available
+        await loginWithDevice();
+
+        // THEN load progress (which needs auth.currentUser to fetch cloud data)
+        await progressActions.loadProgress();
+        await hintActions.loadHints();
+
+        try {
+          initializeAds();
+        } catch (error) {
+          console.log("📺 Ad initialization skipped:", error);
+        }
+      } catch (e) {
+        console.warn("App init error:", e);
+      } finally {
+        setAppIsReady(true);
+      }
     }
-  }, [loaded]);
 
-  if (!loaded) {
+    prepare();
+  }, []);
+
+  // Setup sync queue listener
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+
+    const setupSync = async () => {
+      const { setupSyncListener } = await import("../src/services/syncQueue");
+      unsubscribe = setupSyncListener();
+    };
+
+    setupSync();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  const onLayoutRootView = useCallback(async () => {
+    if (appIsReady) {
+      await SplashScreen.hideAsync();
+    }
+  }, [appIsReady]);
+
+  if (!appIsReady) {
     return null;
   }
 
-  return <RootLayoutNav />;
-}
-
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{ persister: asyncStoragePersister }}
+      >
+        <View style={styles.container} onLayout={onLayoutRootView}>
+          <StatusBar style="light" />
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: COLORS.surface },
+              headerTintColor: COLORS.textPrimary,
+              headerTitleStyle: { fontWeight: "600" },
+              contentStyle: { backgroundColor: COLORS.background },
+              animation: "slide_from_right",
+              headerShadowVisible: false,
+            }}
+          />
+          {__DEV_MODE__ && <DevPanel />}
+        </View>
+      </PersistQueryClientProvider>
+    </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.background },
+});
