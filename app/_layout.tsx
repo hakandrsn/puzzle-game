@@ -5,9 +5,10 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import CustomSplashScreen from "../src/components/CustomSplashScreen";
 import DevPanel from "../src/components/DevPanel";
 import { COLORS } from "../src/constants/gameConfig";
 import { initializeAds } from "../src/services/adManager";
@@ -34,36 +35,41 @@ SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [appIsReady, setAppIsReady] = useState(false);
+  const [isSplashAnimationFinished, setIsSplashAnimationFinished] =
+    useState(false);
+
   const progressActions = useProgressActions();
   const adActions = useAdActions();
 
   useEffect(() => {
     async function prepare() {
       try {
+        // Hide Native Splash IMMEDIATELY so our Custom Splash shows
+        await SplashScreen.hideAsync();
+
         const deviceId = await getDeviceId();
         console.log("🚀 App starting with device:", deviceId);
 
-        // CRITICAL: Login FIRST so auth.currentUser is available
+        // Login & Load Data
         await loginWithDevice();
-
-        // THEN load progress (which needs auth.currentUser to fetch cloud data)
         await progressActions.loadProgress();
         await adActions.loadAdState();
 
-        // Load Game Data (Chapters)
         const { getChapters } = await import("../src/store/dataStore").then(
           (m) => m.useDataStore.getState().actions,
         );
         await getChapters();
 
         try {
-          initializeAds();
+          // Delay ad init slightly to prioritize UI
+          setTimeout(() => initializeAds(), 100);
         } catch (error) {
           console.log("📺 Ad initialization skipped:", error);
         }
       } catch (e) {
         console.warn("App init error:", e);
       } finally {
+        // Data is ready, start transitioning out the splash screen
         setAppIsReady(true);
       }
     }
@@ -71,33 +77,18 @@ export default function RootLayout() {
     prepare();
   }, []);
 
-  // Setup sync queue listener
+  // Sync Queue Setup
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
-
     const setupSync = async () => {
       const { setupSyncListener } = await import("../src/services/syncQueue");
       unsubscribe = setupSyncListener();
     };
-
     setupSync();
-
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      if (unsubscribe) unsubscribe();
     };
   }, []);
-
-  const onLayoutRootView = useCallback(async () => {
-    if (appIsReady) {
-      await SplashScreen.hideAsync();
-    }
-  }, [appIsReady]);
-
-  if (!appIsReady) {
-    return null;
-  }
 
   return (
     <SafeAreaProvider>
@@ -105,22 +96,44 @@ export default function RootLayout() {
         client={queryClient}
         persistOptions={{ persister: asyncStoragePersister }}
       >
-        <View style={styles.container} onLayout={onLayoutRootView}>
+        <View style={styles.container}>
           <StatusBar style="dark" />
-          <Stack
-            screenOptions={{
-              headerStyle: { backgroundColor: COLORS.surface },
-              headerTintColor: COLORS.textPrimary, // This is now white/dark depending on colors.ts
-              headerTitleStyle: {
-                fontWeight: "600",
-                color: COLORS.textPrimary,
-              },
-              contentStyle: { backgroundColor: COLORS.background },
-              headerShadowVisible: false,
-            }}
-          />
-          {__DEV__ && <DevPanel />}
+
+          {/* Main App Content - Rendered but covered by Splash until ready */}
+          {appIsReady && (
+            <Stack
+              screenOptions={{
+                headerStyle: { backgroundColor: COLORS.surface },
+                headerTintColor: COLORS.textPrimary,
+                headerTitleStyle: {
+                  fontWeight: "600",
+                  color: COLORS.textPrimary,
+                },
+                contentStyle: { backgroundColor: COLORS.background },
+                headerShadowVisible: false,
+              }}
+            />
+          )}
+
+          {/* Custom Splash Screen - Exits with animation when appIsReady */}
+          {!appIsReady && <CustomSplashScreen />}
+
+          {/* 
+             NOTE: To allow Reanimated 'exiting' animation to be visible,
+             CustomSplashScreen must be unmounted.
+             However, if we want the Stack to be visible *underneath* while it fades out,
+             we need a specific structure.
+             
+             Actually, simplest way for 'Cover' splash:
+             1. Show Splash.
+             2. appIsReady = true -> Splash unmounts.
+             3. CustomSplashScreen has `exiting={FadeOut}` prop.
+             4. Reanimated will keep the Splash visible (absolute positioned) while fading it out.
+             5. The Stack (which just rendered) will be visible underneath!
+          */}
         </View>
+
+        {__DEV__ && <DevPanel />}
       </PersistQueryClientProvider>
     </SafeAreaProvider>
   );
