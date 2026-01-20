@@ -227,7 +227,12 @@ export default function JigsawGameScreen() {
     const nextLevelPromise = getLevelById(nextChapter, nextLevelId);
 
     // Reklamı başlat (Bu sırada nextLevelPromise arkada resolve oluyor)
-    const adWatched = await showInterstitial();
+    // Chapter 1'de ilk 4 level reklamsız, 5+ levellerde reklam göster
+    // Diğer chapterlarda her zaman reklam göster
+    const shouldShowAd = currentChapter !== 1 || currentLevelId >= 4;
+    if (shouldShowAd) {
+      await showInterstitial();
+    }
 
     // Reklam bitti. Verimiz %99 ihtimalle hazır.
     const nextLvlData = await nextLevelPromise;
