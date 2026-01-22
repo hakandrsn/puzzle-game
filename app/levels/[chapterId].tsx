@@ -1,8 +1,8 @@
+import { LegendList } from "@legendapp/list";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -35,85 +35,9 @@ interface LevelCardProps {
   onPress: () => void;
 }
 
-import { Image } from "expo-image"; // Ensure this is imported at top of file
-
-import { Ionicons } from "@expo/vector-icons"; // Add this import at the top if missing, I will check effectively by deducing or adding it.
+import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-// ... existing imports
-
-const LevelCard = React.memo<LevelCardProps>(
-  ({ level, index, isUnlocked, progress, cardSize, chapterColor, onPress }) => {
-    return (
-      <View style={{ width: cardSize, height: cardSize, alignItems: "center" }}>
-        <TouchableOpacity
-          style={[
-            styles.levelCard,
-            { width: cardSize, height: cardSize },
-            progress?.completed && {
-              borderColor: chapterColor || COLORS.accent,
-              borderWidth: 2,
-            },
-          ]}
-          onPress={onPress}
-          disabled={!isUnlocked}
-          activeOpacity={0.7}
-        >
-          {/* Background Image */}
-          <Image
-            source={level.imageSource}
-            style={[StyleSheet.absoluteFill, styles.cardBgImage]}
-            contentFit="cover"
-            transition={200}
-            cachePolicy="memory-disk"
-          />
-
-          {/* Dark Overlay for Readability (Only when locked) */}
-          {!isUnlocked && (
-            <View style={[StyleSheet.absoluteFill, styles.cardOverlayLocked]} />
-          )}
-
-          {isUnlocked ? (
-            /* Redesigned Bottom Bar: Number + Stars */
-            <View style={styles.cardBottomBar}>
-              <Text style={styles.levelNumber}>{level.id}</Text>
-
-              {/* Stars next to number */}
-              <View style={styles.starsRowInline}>
-                {[1, 2, 3].map((star) => {
-                  const isFilled =
-                    progress?.completed && star <= (progress?.stars || 0);
-                  return (
-                    <Ionicons
-                      key={star}
-                      name="star"
-                      size={12}
-                      color={isFilled ? "#fbbf24" : "rgba(255,255,255,0.4)"}
-                      style={isFilled && styles.starShadow}
-                    />
-                  );
-                })}
-              </View>
-            </View>
-          ) : (
-            <View style={styles.centeredContent}>
-              <Text style={styles.lockIcon}>🔒</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
-    );
-  },
-  (prev, next) => {
-    return (
-      prev.isUnlocked === next.isUnlocked &&
-      prev.progress?.completed === next.progress?.completed &&
-      prev.progress?.stars === next.progress?.stars &&
-      prev.cardSize === next.cardSize &&
-      prev.chapterColor === next.chapterColor
-    );
-  },
-);
+import LevelCard from "../../src/components/LevelCard";
 
 export default function LevelsScreen() {
   const router = useRouter();
@@ -163,6 +87,40 @@ export default function LevelsScreen() {
     return { completed, total: 24, stars };
   }, [userProgress.completedLevels, chapterId]);
 
+  // Calculate Last Open Level for Highlighting
+  const lastOpenLevelId = React.useMemo(() => {
+    if (levels.length === 0 || !chapter) return 1;
+
+    let lastId = 1;
+    const isChapterUnlocked = userProgress.unlockedChapters.includes(
+      Number(chapterId),
+    );
+
+    if (isChapterUnlocked) {
+      for (const lvl of levels) {
+        let isUnlocked = false;
+        if (lvl.id === 1) isUnlocked = true;
+        else {
+          const prevKey = `${chapterId}-${lvl.id - 1}`;
+          isUnlocked =
+            userProgress.completedLevels[prevKey]?.completed ?? false;
+        }
+
+        if (isUnlocked) {
+          lastId = lvl.id;
+        } else {
+          break;
+        }
+      }
+    }
+    return lastId;
+  }, [levels, userProgress, chapterId, chapter]);
+
+  // Log Last Open Level (User Request) - reusing calculated value
+  useEffect(() => {
+    console.log(`[LevelsScreen] Last Open Level ID: ${lastOpenLevelId}`);
+  }, [lastOpenLevelId]);
+
   // Handle level navigation with loading state
   const handleLevelPress = useCallback(
     (levelId: number) => {
@@ -184,6 +142,7 @@ export default function LevelsScreen() {
 
       const levelKey = `${chapter.id}-${item.id}`;
       const levelProgress = userProgress.completedLevels[levelKey] || null;
+      const isLastActive = item.id === lastOpenLevelId;
 
       let isUnlocked = false;
       if (userProgress.unlockedChapters.includes(chapter.id)) {
@@ -200,6 +159,7 @@ export default function LevelsScreen() {
           level={item}
           index={index}
           isUnlocked={isUnlocked}
+          isLastActive={isLastActive}
           progress={levelProgress}
           cardSize={cardSize}
           chapterColor={chapter.color}
@@ -207,23 +167,13 @@ export default function LevelsScreen() {
         />
       );
     },
-    [chapter, userProgress, cardSize, handleLevelPress],
+    [chapter, userProgress, cardSize, handleLevelPress, lastOpenLevelId],
   );
 
   // Memoized separator - avoids inline function recreation
   const ItemSeparator = useCallback(
     () => <View style={{ height: gap }} />,
     [gap],
-  );
-
-  // getItemLayout - eliminates layout measurement overhead for fixed-size grid items
-  const getItemLayout = useCallback(
-    (_: any, index: number) => ({
-      length: cardSize + gap,
-      offset: (cardSize + gap) * Math.floor(index / numColumns),
-      index,
-    }),
-    [cardSize, gap, numColumns],
   );
 
   // Show loading only if data is not ready
@@ -288,7 +238,7 @@ export default function LevelsScreen() {
         </View>
       </View>
 
-      <FlatList
+      <LegendList
         data={levels}
         renderItem={renderLevel}
         keyExtractor={(item) => item.id.toString()}
@@ -297,14 +247,8 @@ export default function LevelsScreen() {
         contentContainerStyle={[styles.listContent, { padding }]}
         columnWrapperStyle={{ gap }}
         ItemSeparatorComponent={ItemSeparator}
-        getItemLayout={getItemLayout}
         showsVerticalScrollIndicator={false}
-        // Performance optimizations
-        removeClippedSubviews={true}
-        initialNumToRender={numColumns * 3}
-        maxToRenderPerBatch={numColumns}
-        windowSize={3}
-        updateCellsBatchingPeriod={50} // Batch UI updates for smoother rendering
+        estimatedItemSize={cardSize + gap}
       />
 
       {/* Loading Overlay */}
@@ -373,55 +317,6 @@ const styles = StyleSheet.create({
   starPillText: { color: COLORS.textPrimary, fontWeight: "800", fontSize: 16 },
   listContent: {
     paddingBottom: 40,
-  },
-  levelCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: "hidden", // Important for image masking
-  },
-  cardBgImage: {
-    opacity: 1, // Full vibrancy!
-  },
-  cardOverlayLocked: {
-    backgroundColor: "rgba(0,0,0,0.6)", // Lighter lock overlay
-  },
-  cardBottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 28,
-    backgroundColor: "rgba(0,0,0,0.6)", // Semi-transparent dark overlay
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    gap: 4,
-  },
-  levelNumber: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#ffffff",
-  },
-  starsRowInline: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 1,
-  },
-  lockIcon: {
-    fontSize: 24,
-  },
-  centeredContent: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  starShadow: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 1,
   },
   backButton: {
     height: 50,

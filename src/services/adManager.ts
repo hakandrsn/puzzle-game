@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { MaxAdContentRating } from "react-native-google-mobile-ads";
 import { AD_CONFIG } from "../constants/gameConfig";
 import { useAdStore } from "../store/adStore";
 
@@ -104,6 +105,7 @@ export const showInterstitial = async (): Promise<boolean> => {
         AdEventType.CLOSED,
         () => {
           console.log("📺 Interstitial closed by user");
+          useAdStore.getState().actions.setAdShowing(false); // Enable other ads
           closeListener(); // Remove listener
           resolve(true); // Ad was watched
         },
@@ -120,9 +122,11 @@ export const showInterstitial = async (): Promise<boolean> => {
       );
 
       interstitialAd.show();
+      useAdStore.getState().actions.setAdShowing(true); // Disable other ads
       useAdStore.getState().actions.markInterstitialShown();
     } catch (error) {
       console.log("📺 Interstitial show error:", error);
+      useAdStore.getState().actions.setAdShowing(false); // Reset on error
       resolve(false);
     }
   });
@@ -180,6 +184,7 @@ export const showRewarded = (): Promise<boolean> => {
       RewardedAdEventType.EARNED_REWARD,
       () => {
         unsubscribeReward();
+        useAdStore.getState().actions.setAdShowing(false);
         useAdStore.getState().actions.markRewardedShown();
         resolve(true);
       },
@@ -189,6 +194,7 @@ export const showRewarded = (): Promise<boolean> => {
       AdEventType.CLOSED,
       () => {
         unsubscribeClose();
+        useAdStore.getState().actions.setAdShowing(false);
       },
     );
 
@@ -196,14 +202,21 @@ export const showRewarded = (): Promise<boolean> => {
       AdEventType.ERROR,
       () => {
         unsubscribeError();
+        useAdStore.getState().actions.setAdShowing(false);
         resolve(false);
       },
     );
 
     try {
-      rewardedAd.show();
+      if (rewardedAd) {
+        rewardedAd.show();
+        useAdStore.getState().actions.setAdShowing(true);
+      } else {
+        throw new Error("Rewarded ad instance is null");
+      }
     } catch (error) {
       console.log("🎁 Rewarded show error:", error);
+      useAdStore.getState().actions.setAdShowing(false);
       resolve(false);
     }
   });
@@ -224,6 +237,24 @@ export const initializeAds = () => {
   // This allows splash screen and initial animations to complete smoothly
   setTimeout(() => {
     console.log("📺 Initializing ads (deferred)...");
+
+    // Families Policy Configuration
+    if (isAdMobAvailable) {
+      const mobileAds = require("react-native-google-mobile-ads").default;
+      mobileAds()
+        .setRequestConfiguration({
+          // Child-directed setting
+          tagForChildDirectedTreatment: true,
+          // Under-age of consent setting
+          tagForUnderAgeOfConsent: true,
+          // Content rating: General audiences (G)
+          maxAdContentRating: MaxAdContentRating.G,
+        })
+        .then(() => {
+          console.log("📺 AdMob configuration set for Families Policy");
+        });
+    }
+
     loadInterstitial();
     loadRewarded();
   }, 1500); // 1.5s delay after app is interactive

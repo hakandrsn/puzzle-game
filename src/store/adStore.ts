@@ -54,6 +54,9 @@ interface AdState {
   totalInterstitialsShown: number;
   totalRewardedsShown: number;
   totalBannersShown: number;
+
+  // Global ad state
+  isAdShowing: boolean; // True when a full-screen ad (Interstitial/Rewarded) is open
 }
 
 interface AdActions {
@@ -77,6 +80,9 @@ interface AdActions {
   // Persistence
   loadAdState: () => Promise<void>;
   saveAdState: () => Promise<void>;
+
+  // Global state
+  setAdShowing: (showing: boolean) => void;
 }
 
 interface AdStore extends AdState {
@@ -102,6 +108,7 @@ const initialState: AdState = {
   totalInterstitialsShown: 0,
   totalRewardedsShown: 0,
   totalBannersShown: 0,
+  isAdShowing: false,
 };
 
 // ==========================================
@@ -262,6 +269,10 @@ export const useAdStore = create<AdStore>((set, get) => ({
         console.error("📺 Failed to save ad state:", error);
       }
     },
+
+    setAdShowing: (showing: boolean) => {
+      set({ isAdShowing: showing });
+    },
   },
 }));
 
@@ -276,3 +287,4 @@ export const useIsRewardedReady = () =>
   useAdStore((state) => state.isRewardedReady);
 export const useIsBannerReady = () =>
   useAdStore((state) => state.isBannerReady);
+export const useIsAdShowing = () => useAdStore((state) => state.isAdShowing);

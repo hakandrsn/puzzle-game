@@ -11,96 +11,19 @@ import {
 } from "@/src/store/dataStore";
 import { useProgressActions, useTotalStars } from "@/src/store/progressStore";
 import { Chapter } from "@/src/types";
-import { Image } from "expo-image";
+import { LegendList } from "@legendapp/list";
 import { Stack, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   InteractionManager,
   StyleSheet,
   Text,
-  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
+import ChapterCard from "../src/components/ChapterCard";
 import ChapterNativeAd from "../src/components/ChapterNativeAd";
-
-interface ChapterCardProps {
-  chapter: Chapter;
-  index: number;
-  isUnlocked: boolean;
-  progress: { completed: number; total: number; stars: number };
-  cardWidth: number;
-  onPress: () => void;
-}
-
-const ChapterCard = React.memo<ChapterCardProps>(
-  ({ chapter, index, isUnlocked, progress, cardWidth, onPress }) => {
-    const progressPercent = (progress.completed / progress.total) * 100;
-
-    return (
-      <View style={{ width: cardWidth }}>
-        <TouchableOpacity
-          style={[styles.card, !isUnlocked && styles.cardLocked]}
-          onPress={onPress}
-          disabled={!isUnlocked}
-          activeOpacity={0.7}
-        >
-          {/* Thumbnail Section */}
-          <View style={styles.thumbnailArea}>
-            <Image
-              source={chapter.thumbnail}
-              style={styles.thumbnail}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={200}
-            />
-            <View style={styles.overlay} />
-            <View style={styles.idBadge}>
-              <Text style={styles.idBadgeTxt}>{chapter.id}</Text>
-            </View>
-            {!isUnlocked && (
-              <View style={styles.lockedArea}>
-                <Text style={styles.lockIc}>🔒</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Content Section */}
-          <View style={styles.infoArea}>
-            <Text style={styles.name} numberOfLines={1}>
-              {chapter.name}
-            </Text>
-            <View style={styles.progressRow}>
-              <View style={styles.barBg}>
-                <View
-                  style={[styles.barFill, { width: `${progressPercent}%` }]}
-                />
-              </View>
-              <Text style={styles.progressStats}>
-                {progress.completed}/{progress.total}
-              </Text>
-            </View>
-            <View style={styles.starInfo}>
-              <Text style={styles.starIc}>★</Text>
-              <Text style={styles.starVal}>{progress.stars}</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </View>
-    );
-  },
-  (prev, next) => {
-    return (
-      prev.isUnlocked === next.isUnlocked &&
-      prev.progress.completed === next.progress.completed &&
-      prev.progress.stars === next.progress.stars &&
-      prev.cardWidth === next.cardWidth &&
-      prev.index === next.index
-    );
-  },
-);
 
 export default function ChaptersScreen() {
   const router = useRouter();
@@ -135,6 +58,7 @@ export default function ChaptersScreen() {
     const rows: Array<{ type: "row" | "ad"; items?: Chapter[]; id: string }> =
       [];
     let currentRow: Chapter[] = [];
+    let adAdded = false;
 
     chapters.forEach((chapter, index) => {
       currentRow.push(chapter);
@@ -149,12 +73,13 @@ export default function ChaptersScreen() {
         currentRow = [];
       }
 
-      // Add ad after every 4th chapter
-      if (adActions.shouldShowNativeAdAtIndex(index)) {
+      // Add ad only once
+      if (!adAdded && adActions.shouldShowNativeAdAtIndex(index)) {
         rows.push({
           type: "ad",
           id: `ad-${index}`,
         });
+        adAdded = true;
       }
     });
 
@@ -176,7 +101,7 @@ export default function ChaptersScreen() {
               key={chapter.id}
               chapter={chapter}
               index={chapters.indexOf(chapter)}
-             isUnlocked={progressActions.isChapterUnlocked(chapter.id)}
+              isUnlocked={progressActions.isChapterUnlocked(chapter.id)}
               progress={progressActions.getChapterProgress(chapter.id)}
               cardWidth={cardWidth}
               onPress={() => router.push(`/levels/${chapter.id}`)}
@@ -196,14 +121,6 @@ export default function ChaptersScreen() {
 
   // getItemLayout - eliminates layout measurement overhead for fixed-size rows
   const ROW_HEIGHT = cardWidth * 1.5 + 100; // card aspect ratio + info area padding
-  const getItemLayout = useCallback(
-    (_: any, index: number) => ({
-      length: ROW_HEIGHT,
-      offset: ROW_HEIGHT * index,
-      index,
-    }),
-    [ROW_HEIGHT],
-  );
 
   // Show loading until navigation animation completes AND data is ready
   if (!canRender || (isLoading && chapters.length === 0)) {
@@ -231,19 +148,14 @@ export default function ChaptersScreen() {
         }}
       />
 
-      <FlatList
+      <LegendList
         data={listData}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={[styles.listContent, { padding }]}
         ItemSeparatorComponent={ItemSeparator}
-        getItemLayout={getItemLayout}
         showsVerticalScrollIndicator={false}
-        // Performance optimizations
-        removeClippedSubviews={true}
-        initialNumToRender={8}
-        maxToRenderPerBatch={4}
-        windowSize={10}
+        estimatedItemSize={ROW_HEIGHT}
       />
     </View>
   );
@@ -272,56 +184,4 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   listContent: { paddingBottom: 40 },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cardLocked: { opacity: 0.6 },
-  thumbnailArea: { aspectRatio: 1.5, position: "relative" },
-  thumbnail: { width: "100%", height: "100%" },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.2)",
-  },
-  idBadge: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.background,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  idBadgeTxt: { color: COLORS.textPrimary, fontWeight: "900", fontSize: 13 },
-  lockedArea: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  lockIc: { fontSize: 32 },
-  infoArea: { padding: 15, gap: 10 },
-  name: { fontSize: 18, fontWeight: "800", color: COLORS.textPrimary },
-  progressRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  barBg: {
-    flex: 1,
-    height: 6,
-    backgroundColor: "#e0e0e0",
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  barFill: { height: "100%", backgroundColor: COLORS.accent },
-  progressStats: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    fontWeight: "700",
-  },
-  starInfo: { flexDirection: "row", alignItems: "center", gap: 5 },
-  starIc: { fontSize: 14, color: COLORS.starFilled },
-  starVal: { fontSize: 14, color: COLORS.textPrimary, fontWeight: "700" },
 });

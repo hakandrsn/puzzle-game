@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
-import { AD_CONFIG } from "../constants/gameConfig";
-import { useAdActions, useIsBannerReady } from "../store/adStore";
+import { Platform, StyleSheet, Text, View } from "react-native";
+import { AD_CONFIG, COLORS } from "../constants/gameConfig";
+import {
+  useAdActions,
+  useIsAdShowing,
+  useIsBannerReady,
+} from "../store/adStore";
 
 // ==========================================
 // CHECK IF ADMOB IS AVAILABLE
@@ -38,6 +42,7 @@ const GameBannerAd: React.FC<GameBannerAdProps> = ({
 }) => {
   const adActions = useAdActions();
   const isBannerReady = useIsBannerReady();
+  const isAdShowing = useIsAdShowing();
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -47,6 +52,11 @@ const GameBannerAd: React.FC<GameBannerAdProps> = ({
   }, []);
 
   if (!isAdMobAvailable || !BannerAd || !BannerAdSize) {
+    return null;
+  }
+
+  // Hide banner if a full-screen ad involves ensuring no multiple ads are shown
+  if (isAdShowing) {
     return null;
   }
 
@@ -73,15 +83,18 @@ const GameBannerAd: React.FC<GameBannerAdProps> = ({
 
   return (
     <View style={styles.bannerContainer}>
-      <BannerAd
-        unitId={getBannerId()}
-        size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-        requestOptions={{
-          requestNonPersonalizedAdsOnly: false,
-        }}
-        onAdLoaded={handleAdLoaded}
-        onAdFailedToLoad={handleAdFailedToLoad}
-      />
+      <Text style={styles.adLabel}>Reklam</Text>
+      <View style={styles.adWrapper}>
+        <BannerAd
+          unitId={getBannerId()}
+          size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+          requestOptions={{
+            requestNonPersonalizedAdsOnly: false,
+          }}
+          onAdLoaded={handleAdLoaded}
+          onAdFailedToLoad={handleAdFailedToLoad}
+        />
+      </View>
     </View>
   );
 };
@@ -90,6 +103,18 @@ const styles = StyleSheet.create({
   bannerContainer: {
     width: "100%",
     alignItems: "center",
+    paddingVertical: 10, // Add spacing around banner
+  },
+  adLabel: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+    opacity: 0.7,
+  },
+  adWrapper: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 50, // Minimum height for banner
   },
 });
 

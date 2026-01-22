@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
+  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -34,13 +35,24 @@ import { useDataActions } from "@/src/store/dataStore";
 // Components
 import BackgroundMusic from "@/src/components/BackgroundMusic";
 import GameBannerAd from "@/src/components/GameBannerAd";
-import GameSettings from "@/src/components/GameSettings";
+import GameHeader from "@/src/components/game/GameHeader";
+import GameStats from "@/src/components/game/GameStats";
+import LevelCompleteOverlay from "@/src/components/game/LevelCompleteOverlay";
 
 import { useClickSound } from "@/src/hooks/useClickSound";
 import JigsawBoard from "@/src/modules/jigsaw/JigsawBoard";
 import { showInterstitial } from "@/src/services/adManager";
 import { useProgressActions } from "@/src/store/progressStore";
 import { Level } from "@/src/types";
+
+const GAME_LAYOUT = {
+  HEADER: 0.05, // Keep for reference or remove if dynamic
+  // STATS, STARS removed - using natural size
+  // BOARD removed - using flex: 1
+  NEXT_AREA_HEIGHT: 85, // reduced by ~30% from 120
+  STARS_HEIGHT: 60, // Fixed height for Stars area
+  BANNER: 0.15,
+};
 
 export default function JigsawGameScreen() {
   const router = useRouter();
@@ -77,9 +89,6 @@ export default function JigsawGameScreen() {
   const [showPreview, setShowPreview] = useState(false);
   const [showContinue, setShowContinue] = useState(false);
 
-  // Vertical Scroll Transition
-  const scrollTranslateY = useSharedValue(0);
-
   // Win Animation SharedValues
   const headerTranslateY = useSharedValue(0);
   const movesTranslateY = useSharedValue(0);
@@ -87,8 +96,11 @@ export default function JigsawGameScreen() {
   const star2Scale = useSharedValue(0);
   const star3Scale = useSharedValue(0);
   const boardScale = useSharedValue(1);
-  const boardTranslateY = useSharedValue(0);
   const continueButtonScale = useSharedValue(0);
+
+  // Layout Animation SharedValues
+  const starsHeightAnim = useSharedValue(0);
+  const nextAreaHeightAnim = useSharedValue(0);
 
   const [earnedStars, setEarnedStars] = useState(0);
 
@@ -106,7 +118,6 @@ export default function JigsawGameScreen() {
 
     // Board animasyon değerlerini sıfırla - önceki level'dan kalma değerleri temizle
     boardScale.value = 1;
-    boardTranslateY.value = 0;
 
     const l = await getLevelById(chapId, lvlId);
     if (l) {
@@ -158,8 +169,8 @@ export default function JigsawGameScreen() {
         // Animations - board moves DOWN on win
         headerTranslateY.value = withTiming(-100, { duration: 400 });
         movesTranslateY.value = withTiming(-30, { duration: 500 });
-        boardScale.value = withTiming(0.85, { duration: 500 });
-        boardTranslateY.value = withTiming(-20, { duration: 500 }); // Move DOWN
+        // Scale handled in separate useEffect
+        // boardScale.value = withTiming(0.85, { duration: 500 });
 
         setTimeout(() => {
           star1Scale.value = withTiming(1, { duration: 300 });
@@ -191,7 +202,6 @@ export default function JigsawGameScreen() {
     headerTranslateY.value = 0;
     movesTranslateY.value = 0;
     boardScale.value = 1;
-    boardTranslateY.value = 0;
     continueButtonScale.value = 0;
     star1Scale.value = 0;
     star2Scale.value = 0;
@@ -293,7 +303,6 @@ export default function JigsawGameScreen() {
   const handleReplay = () => {
     headerTranslateY.value = 0;
     boardScale.value = 1;
-    boardTranslateY.value = 0;
     continueButtonScale.value = 0;
     setShowContinue(false);
     star1Scale.value = 0;
@@ -307,9 +316,6 @@ export default function JigsawGameScreen() {
   };
 
   // Animated Styles
-  const scrollStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: scrollTranslateY.value }],
-  }));
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: headerTranslateY.value }],
@@ -331,29 +337,68 @@ export default function JigsawGameScreen() {
     // Scale ve translateY değerlerini uygula
     // Bu değerler sadece win animasyonunda değişiyor
     return {
-      transform: [
-        { scale: boardScale.value },
-        { translateY: boardTranslateY.value },
-      ],
+      transform: [{ scale: boardScale.value }],
     };
   });
   const continueButtonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: continueButtonScale.value }],
   }));
 
-  // Layout Calculations - FIXED PERCENTAGES
-  const HEADER_HEIGHT = 60;
-  const MOVES_HEIGHT = 80;
-  const BANNER_HEIGHT = canShowBanner() ? 60 : 0;
-  const topInset = insets.top;
+  // Layout Calculations - STACK LAYOUT
 
-  // Board positioned below header + stats area
-  const contentTopStart = topInset + HEADER_HEIGHT + MOVES_HEIGHT;
-  const bottomSpace = canShowBanner() ? BANNER_HEIGHT + 10 : insets.bottom + 10;
+  const HEADER_HEIGHT_CONTENT = height * GAME_LAYOUT.HEADER;
+  const HEADER_HEIGHT_TOTAL = HEADER_HEIGHT_CONTENT + insets.top;
+  const BANNER_HEIGHT = height * GAME_LAYOUT.BANNER;
 
-  // Board takes 75% of available height for larger gameplay area
-  const availableHeight = height - contentTopStart - bottomSpace;
-  const boardHeight = Math.floor(availableHeight * 0.95);
+  // Animation values for Layout Transition
+
+  // Update animations when status changes to won
+  useEffect(() => {
+    if (status === "won") {
+      starsHeightAnim.value = withTiming(GAME_LAYOUT.STARS_HEIGHT, {
+        duration: 500,
+      });
+      nextAreaHeightAnim.value = withTiming(GAME_LAYOUT.NEXT_AREA_HEIGHT, {
+        duration: 500,
+      });
+      boardScale.value = withTiming(0.85, {
+        // Shrink to fit
+        duration: 500,
+      });
+    } else {
+      // Reset
+      starsHeightAnim.value = withTiming(0, { duration: 300 });
+      nextAreaHeightAnim.value = withTiming(0, { duration: 300 });
+      boardScale.value = withTiming(1, { duration: 300 });
+    }
+  }, [status]);
+
+  const starsAnimatedStyle = useAnimatedStyle(() => ({
+    height: starsHeightAnim.value,
+    width: interpolate(
+      starsHeightAnim.value,
+      [0, GAME_LAYOUT.STARS_HEIGHT],
+      [0, 160], // Approximate width of 3 stars
+    ),
+    opacity: interpolate(
+      starsHeightAnim.value,
+      [0, GAME_LAYOUT.STARS_HEIGHT],
+      [0, 1],
+    ),
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  }));
+
+  const nextAreaAnimatedStyle = useAnimatedStyle(() => ({
+    height: nextAreaHeightAnim.value,
+    opacity: interpolate(
+      nextAreaHeightAnim.value,
+      [0, GAME_LAYOUT.NEXT_AREA_HEIGHT],
+      [0, 1],
+    ),
+    overflow: "hidden",
+  }));
 
   // Render Inner Content (The Game)
   // We extract this to render it twice (once for prev, once for next)
@@ -378,46 +423,82 @@ export default function JigsawGameScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <BackgroundMusic />
 
-      {/* Main Vertical Scroll Container */}
-      <Animated.View style={[{ flex: 1 }, scrollStyle]}>
-        {/* VIEW 1: PREVIOUS LEVEL (Only visible during transition) */}
-        {prevLevel && (
-          <View
-            style={{ width, height, position: "absolute", top: 0, left: 0 }}
-          >
-            {/* Just the Image as "Won State" */}
-            <View style={styles.header}>
-              {/* Dummy Header for visuals */}
-              <View style={styles.headerCenter}>
-                <Text style={styles.headerTitle}>{prevLevel.name}</Text>
-              </View>
-            </View>
-            <View
-              style={{
-                flex: 1,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <Image
-                source={prevLevel.imageSource}
-                style={{ width: width - 40, height: boardHeight }}
-                contentFit="contain"
-                cachePolicy="memory-disk"
-              />
-            </View>
-          </View>
-        )}
+      <View style={{ flex: 1, backgroundColor: COLORS.background }}>
+        {/* 1. HEADER (5% + Safe Area Top) */}
+        {/* We use a container with explicit height to reserve space in the stack */}
+        <View style={{ height: HEADER_HEIGHT_TOTAL, zIndex: 100 }}>
+          <GameHeader
+            title={level?.name || `Level ${currentLevelId}`}
+            imageSource={level?.imageSource}
+            onBack={handleBack}
+            // onReplay removed
+            onPreview={() => setShowPreview(true)}
+            topInset={insets.top}
+            // GameHeader logic: height prop is the content height. It adds topInset itself.
+            // We want it to be visually fitting.
+            height={HEADER_HEIGHT_CONTENT}
+            animatedStyle={headerAnimatedStyle}
+          />
+        </View>
 
-        {/* VIEW 2: CURRENT / NEXT LEVEL (Bottom if transition, or Top if normal) */}
+        {/* 2. & 3. INFO ROW (Stats + Stars) */}
         <View
           style={{
-            width,
-            height,
-            marginTop: prevLevel ? height : 0, // Push down if prev exists
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            zIndex: 90,
+            width: "100%",
+            marginTop: 8,
+            marginBottom: 8,
           }}
         >
-          {/* Confetti (Only for current active game) */}
+          <GameStats
+            moves={moves}
+            // height removed, use natural
+            movesAnimatedStyle={movesAnimatedStyle}
+          />
+
+          {/* Stars Area */}
+          <Animated.View style={starsAnimatedStyle}>
+            <View style={{ flexDirection: "row", gap: 4 }}>
+              {[1, 2, 3].map((star) => (
+                <Animated.View
+                  key={star}
+                  style={
+                    star === 1
+                      ? star1Style
+                      : star === 2
+                        ? star2Style
+                        : star3Style
+                  }
+                >
+                  <Ionicons
+                    name="star"
+                    size={40}
+                    color={
+                      earnedStars >= star ? COLORS.starFilled : COLORS.starEmpty
+                    }
+                  />
+                </Animated.View>
+              ))}
+            </View>
+          </Animated.View>
+        </View>
+
+        {/* 4. BOARD AREA (Flex: 1 - Takes remaining space) */}
+        <View
+          style={{
+            flex: 1,
+            width: width,
+            overflow: "hidden",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: 20, // Move spacing here
+          }}
+        >
+          {/* CONFETTI - BEHIND BOARD */}
           {status === "won" && (
             <View style={styles.confettiContainer} pointerEvents="none">
               <LottieView
@@ -429,162 +510,63 @@ export default function JigsawGameScreen() {
             </View>
           )}
 
-          {/* HEADER */}
+          {/* BOARD CONTENT */}
           <Animated.View
             style={[
-              styles.header,
-              { top: insets.top, height: HEADER_HEIGHT },
-              headerAnimatedStyle,
-            ]}
-          >
-            <View style={styles.headerLeftGroups}>
-              <TouchableOpacity onPress={handleBack} style={styles.headerBtn}>
-                <Ionicons
-                  name="chevron-back"
-                  size={28}
-                  color={COLORS.textPrimary}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleReplay} style={styles.headerBtn}>
-                <Ionicons name="refresh" size={24} color={COLORS.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.headerCenter}>
-              <Text style={styles.headerTitle} numberOfLines={1}>
-                {level?.name || `Level ${currentLevelId}`}
-              </Text>
-            </View>
-            <View style={styles.headerRightGroups}>
-              <TouchableOpacity
-                onPress={() => setShowPreview(true)}
-                style={styles.headerBtn}
-              >
-                {level && (
-                  <Image
-                    source={level.imageSource}
-                    style={styles.thumbnail}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                  />
-                )}
-              </TouchableOpacity>
-              <GameSettings />
-            </View>
-          </Animated.View>
-
-          {/* STATS */}
-          <View
-            style={[
-              styles.statsContainer,
-              { top: topInset + HEADER_HEIGHT, height: MOVES_HEIGHT },
-            ]}
-          >
-            <Animated.View style={[styles.movesBlock, movesAnimatedStyle]}>
-              <Text style={styles.movesValueBig}>{moves}</Text>
-              <Text style={styles.movesLabelSmall}>HAMLE</Text>
-            </Animated.View>
-            {/* Stars only visible when game is won */}
-            {status === "won" && (
-              <View style={styles.starsRow}>
-                <Animated.View style={star1Style}>
-                  <Ionicons
-                    name="star"
-                    size={48}
-                    color={
-                      earnedStars >= 1 ? COLORS.starFilled : COLORS.starEmpty
-                    }
-                  />
-                </Animated.View>
-                <Animated.View style={[star2Style, { marginTop: -20 }]}>
-                  <Ionicons
-                    name="star"
-                    size={64}
-                    color={
-                      earnedStars >= 2 ? COLORS.starFilled : COLORS.starEmpty
-                    }
-                  />
-                </Animated.View>
-                <Animated.View style={star3Style}>
-                  <Ionicons
-                    name="star"
-                    size={48}
-                    color={
-                      earnedStars >= 3 ? COLORS.starFilled : COLORS.starEmpty
-                    }
-                  />
-                </Animated.View>
-              </View>
-            )}
-          </View>
-
-          {/* BOARD */}
-          <Animated.View
-            style={[
-              styles.gameArea,
-              { marginTop: contentTopStart, height: boardHeight },
+              {
+                flex: 1,
+                width: "100%",
+                alignItems: "center",
+                justifyContent: "center",
+              },
               boardAnimatedStyle,
             ]}
           >
             {level ? (
               <JigsawBoard
-                key={`${currentChapter}-${currentLevelId}`} // Force remount on level change
+                key={`${currentChapter}-${currentLevelId}`}
                 gridSize={level.gridSize}
                 imageSource={level.imageSource}
                 boardWidth={width}
-                boardHeight={boardHeight}
+                // Use approximate max height to calculate piece sizes
+                // The flex container will clip/shrink the view, but piece calculations
+                // stay based on this "ideal" height.
+                boardHeight={height - HEADER_HEIGHT_TOTAL - BANNER_HEIGHT - 60}
               />
             ) : (
-              // Eski tahta yerine bu görünecek. Ghosting bitti.
-              <View
-                style={{
-                  flex: 1,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
+              <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={COLORS.accent} />
-                <Text
-                  style={{
-                    color: COLORS.textSecondary,
-                    marginTop: 10,
-                    fontSize: 16,
-                  }}
-                >
-                  Sahne Hazırlanıyor...
-                </Text>
               </View>
             )}
           </Animated.View>
-
-          {/* CONTINUE BUTTON */}
-          {showContinue && (
-            <Animated.View
-              style={[styles.continueContainer, continueButtonStyle]}
-            >
-              <TouchableOpacity
-                style={styles.continueButton}
-                onPress={handleNextLevel}
-              >
-                <Text style={styles.continueText}>SONRAKİ</Text>
-                <Ionicons name="arrow-down" size={20} color="white" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.replayButton}
-                onPress={handleReplay}
-              >
-                <Ionicons
-                  name="refresh"
-                  size={18}
-                  color={COLORS.textSecondary}
-                />
-                <Text style={styles.replayText}>Replay</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
         </View>
-      </Animated.View>
 
-      {/* GLOBAL MODALS (Outside Scroll) */}
+        {/* 5. NEXT / LEVEL COMPLETE AREA (Variable Height) */}
+        <Animated.View style={nextAreaAnimatedStyle}>
+          <LevelCompleteOverlay
+            visible={true}
+            animatedStyle={continueButtonStyle}
+            onNext={handleNextLevel}
+            onReplay={handleReplay}
+          />
+        </Animated.View>
+
+        {/* 6. BANNER (Fixed Layout, Margin Auto) */}
+        <View
+          style={{
+            height: BANNER_HEIGHT,
+            justifyContent: "flex-end",
+            alignItems: "center",
+            backgroundColor: "transparent",
+            zIndex: 50,
+            marginTop: "auto",
+          }}
+        >
+          <GameBannerAd />
+        </View>
+      </View>
+
+      {/* GLOBAL MODALS */}
       <Modal
         visible={showPreview}
         transparent
@@ -609,10 +591,6 @@ export default function JigsawGameScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-
-      <View style={styles.bottomBanner}>
-        <GameBannerAd />
-      </View>
     </GestureHandlerRootView>
   );
 }
@@ -637,50 +615,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  header: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 8,
-    zIndex: 100,
-  },
-  headerLeftGroups: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  headerRightGroups: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  headerBtn: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: COLORS.textPrimary,
-  },
-  thumbnail: {
-    width: 32,
-    height: 32,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  bannerContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "transparent",
-    zIndex: 90,
-  },
+  // header: removed
+  // headerCenter: removed
+  // headerTitle: removed
   gameArea: {
     width: "100%",
     backgroundColor: "transparent",
@@ -702,86 +639,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     opacity: 0.8,
   },
-  continueContainer: {
-    position: "absolute",
-    bottom: 40,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    gap: 12,
-  },
-  continueButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: COLORS.accent,
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 30,
-  },
-  continueText: {
-    color: COLORS.textPrimary,
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  replayButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  replayText: {
-    color: COLORS.textMuted,
-    fontSize: 14,
-  },
-  bottomBanner: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    zIndex: 999,
-    backgroundColor: "transparent",
-  },
-  statsContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    zIndex: 95,
-    pointerEvents: "none",
-  },
-  movesBlock: {
-    alignItems: "center",
-  },
-  movesValueBig: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
-    textShadowColor: "rgba(0,0,0,0.1)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  movesLabelSmall: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.textSecondary,
-    marginTop: -2,
-    letterSpacing: 1,
-  },
-  starsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 2,
-    marginTop: 8,
-  },
-  headerCenter: {
-    alignItems: "center",
-  },
+  // bottomBanner: removed
   confettiContainer: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 0,
+    zIndex: -1,
   },
 });
