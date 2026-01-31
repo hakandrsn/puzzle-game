@@ -36,7 +36,7 @@ Eğer varsa, bunları yeni bir "Grup" objesi olarak mı birleştirmeliyim yoksa 
 
 ### Kurulum
 Projeyi incelemek veya geliştirmek isterseniz:
-`
+```
 # Repoyu klonlayın
 git clone https://github.com/hakandrsn/tilo.git
 
@@ -51,4 +51,4 @@ npm install
 
 # Başlatın
 npx expo start
-`
+```
