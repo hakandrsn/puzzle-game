@@ -52,7 +52,7 @@ interface AdState {
 
   // Statistics
   totalInterstitialsShown: number;
-  totalRewardedsShown: number;
+  totalRewardedShown: number;
   totalBannersShown: number;
 
   // Global ad state
@@ -106,7 +106,7 @@ const initialState: AdState = {
   isRewardedReady: false,
   isBannerReady: false,
   totalInterstitialsShown: 0,
-  totalRewardedsShown: 0,
+  totalRewardedShown: 0,
   totalBannersShown: 0,
   isAdShowing: false,
 };
@@ -195,7 +195,7 @@ export const useAdStore = create<AdStore>((set, get) => ({
       const now = Date.now();
       set((state) => ({
         lastRewardedShown: now,
-        totalRewardedsShown: state.totalRewardedsShown + 1,
+        totalRewardedShown: state.totalRewardedShown + 1,
         isRewardedReady: false, // Will be reloaded
       }));
       get().actions.saveAdState();
@@ -244,7 +244,7 @@ export const useAdStore = create<AdStore>((set, get) => ({
             lastInterstitialShown: parsed.lastInterstitialShown || 0,
             lastRewardedShown: parsed.lastRewardedShown || 0,
             totalInterstitialsShown: parsed.totalInterstitialsShown || 0,
-            totalRewardedsShown: parsed.totalRewardedsShown || 0,
+            totalRewardedShown: parsed.totalRewardedsShown || 0,
             totalBannersShown: parsed.totalBannersShown || 0,
           });
           console.log("📺 Ad state loaded from storage");
@@ -261,7 +261,7 @@ export const useAdStore = create<AdStore>((set, get) => ({
           lastInterstitialShown: state.lastInterstitialShown,
           lastRewardedShown: state.lastRewardedShown,
           totalInterstitialsShown: state.totalInterstitialsShown,
-          totalRewardedsShown: state.totalRewardedsShown,
+          totalRewardedShown: state.totalRewardedShown,
           totalBannersShown: state.totalBannersShown,
         };
         await AsyncStorage.setItem(AD_STATE_KEY, JSON.stringify(toSave));

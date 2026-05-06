@@ -59,34 +59,13 @@ export default function StartScreen() {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      const { status } = await requestTrackingPermissionsAsync();
-      if (status === "granted") {
-        console.log("Yay! I have user permission to track data");
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
     const initGame = async () => {
-      // 1. Load data in parallel
       await Promise.all([loadProgress(), loadAdState(), getChapters()]);
-
-      // 2. Ready for UI - allow interaction immediately
       setIsReady(true);
-
-      // 3. Optimization: Non-blocking calculation & prefetch
-      // We don't need to store this in state if we can calc it on click,
-      // but prefetching needs it now.
       const target = getNextPlayableLevel();
 
-      console.log("📍 Smart Navigation Target:", target);
-
       if (target) {
-        // Fetch specific level data to get image URI
         const levelData = await getLevelById(target.chapterId, target.levelId);
-
-        // Fire-and-forget prefetch - don't block the UI
         if (
           levelData?.imageSource &&
           typeof levelData.imageSource === "object" &&

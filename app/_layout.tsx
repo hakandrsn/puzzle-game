@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import CustomSplashScreen from "../src/components/CustomSplashScreen";
+import {requestTrackingPermissionsAsync} from "expo-tracking-transparency";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,12 +42,9 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        // Hide Native Splash IMMEDIATELY so our Custom Splash shows
+        await requestTrackingPermissionsAsync();
         await SplashScreen.hideAsync();
 
-        const deviceId = await getDeviceId();
-
-        // Login & Load Data
         await loginWithDevice();
         await progressActions.loadProgress();
         await adActions.loadAdState();

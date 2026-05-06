@@ -268,10 +268,6 @@ export default function JigsawGameScreen() {
     // -----------------------------------------------------------
     completeLevel(currentChapter, currentLevelId, moves, level.gridSize);
 
-    // -----------------------------------------------------------
-    // SENIOR DOKUNUŞU 2: "Parallel Prefetching"
-    // Reklam başlamadan hemen önce veriyi ve resmi çağırmaya başla.
-    // -----------------------------------------------------------
     const nextLevelPromise = getLevelById(nextChapter, nextLevelId);
 
     // Reklamı başlat (Bu sırada nextLevelPromise arkada resolve oluyor)
