@@ -92,6 +92,37 @@ const OnboardingDemoBoard: React.FC<OnboardingDemoBoardProps> = ({
     return target ? target.id : null;
   }, [pieces]);
 
+  // Neighbor merge map: a placed piece "merges" with adjacent placed pieces
+  // (mirrors the real game's groupId equality check in JigsawBoard.tsx)
+  const neighborConnections = useMemo(() => {
+    const placedMap = new Set<string>();
+    pieces.forEach((p) => {
+      if (p.isPlaced) placedMap.add(`${p.row},${p.col}`);
+    });
+    const result: Record<
+      number,
+      { top: boolean; bottom: boolean; left: boolean; right: boolean }
+    > = {};
+    pieces.forEach((p) => {
+      if (!p.isPlaced) {
+        result[p.id] = {
+          top: false,
+          bottom: false,
+          left: false,
+          right: false,
+        };
+        return;
+      }
+      result[p.id] = {
+        top: placedMap.has(`${p.row - 1},${p.col}`),
+        bottom: placedMap.has(`${p.row + 1},${p.col}`),
+        left: placedMap.has(`${p.row},${p.col - 1}`),
+        right: placedMap.has(`${p.row},${p.col + 1}`),
+      };
+    });
+    return result;
+  }, [pieces]);
+
   const handleDrop = useCallback(
     (draggedId: number, dropRow: number, dropCol: number) => {
       setPieces((prev) => {
@@ -190,25 +221,32 @@ const OnboardingDemoBoard: React.FC<OnboardingDemoBoardProps> = ({
       })}
 
       {/* Pieces */}
-      {pieces.map((p) => (
-        <OnboardingPiece
-          key={p.id}
-          pieceId={p.id}
-          imageRow={p.imageRow}
-          imageCol={p.imageCol}
-          correctRow={p.correctRow}
-          correctCol={p.correctCol}
-          currentRow={p.row}
-          currentCol={p.col}
-          pieceSize={pieceSize}
-          gridRows={GRID_ROWS}
-          gridCols={GRID_COLS}
-          imageSource={DEMO_IMAGE}
-          isActive={activeId === p.id}
-          isPlaced={p.isPlaced}
-          onDrop={handleDrop}
-        />
-      ))}
+      {pieces.map((p) => {
+        const conn = neighborConnections[p.id];
+        return (
+          <OnboardingPiece
+            key={p.id}
+            pieceId={p.id}
+            imageRow={p.imageRow}
+            imageCol={p.imageCol}
+            correctRow={p.correctRow}
+            correctCol={p.correctCol}
+            currentRow={p.row}
+            currentCol={p.col}
+            pieceSize={pieceSize}
+            gridRows={GRID_ROWS}
+            gridCols={GRID_COLS}
+            imageSource={DEMO_IMAGE}
+            isActive={activeId === p.id}
+            isPlaced={p.isPlaced}
+            hasNeighborTop={conn.top}
+            hasNeighborBottom={conn.bottom}
+            hasNeighborLeft={conn.left}
+            hasNeighborRight={conn.right}
+            onDrop={handleDrop}
+          />
+        );
+      })}
     </View>
   );
 };

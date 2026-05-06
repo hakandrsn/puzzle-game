@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   cancelAnimation,
@@ -35,8 +35,15 @@ interface OnboardingPieceProps {
   imageSource: any;
   isActive: boolean;
   isPlaced: boolean;
+  hasNeighborTop?: boolean;
+  hasNeighborBottom?: boolean;
+  hasNeighborLeft?: boolean;
+  hasNeighborRight?: boolean;
   onDrop: (id: number, dropRow: number, dropCol: number) => void;
 }
+
+const BORDER_WIDTH = 2;
+const ACTIVE_BORDER_WIDTH = 3;
 
 const triggerHaptic = (success: boolean) => {
   try {
@@ -64,6 +71,10 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
   imageSource,
   isActive,
   isPlaced,
+  hasNeighborTop = false,
+  hasNeighborBottom = false,
+  hasNeighborLeft = false,
+  hasNeighborRight = false,
   onDrop,
 }) => {
   const targetX = currentCol * pieceSize;
@@ -202,13 +213,16 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
     zIndex: isDragging.value === 1 ? 9999 : isActive ? 20 : isPlaced ? 5 : 10,
   }));
 
-  const borderStyle = useAnimatedStyle(() => {
-    const isHighlighted = isActive && !isPlaced;
-    return {
-      borderColor: isHighlighted ? COLORS.primary : "#ffffff",
-      borderWidth: isHighlighted ? 3 : 2,
-    };
-  });
+  const isHighlighted = isActive && !isPlaced;
+  const sideWidth = isHighlighted ? ACTIVE_BORDER_WIDTH : BORDER_WIDTH;
+  const borderOverlayStyle = {
+    ...StyleSheet.absoluteFillObject,
+    borderColor: isHighlighted ? COLORS.primary : "#ffffff",
+    borderTopWidth: hasNeighborTop ? 0 : sideWidth,
+    borderBottomWidth: hasNeighborBottom ? 0 : sideWidth,
+    borderLeftWidth: hasNeighborLeft ? 0 : sideWidth,
+    borderRightWidth: hasNeighborRight ? 0 : sideWidth,
+  };
 
   // Hint finger: loops from current slot center to correct slot center
   const hintStyle = useAnimatedStyle(() => {
@@ -272,10 +286,7 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
             contentFit="cover"
             cachePolicy="memory-disk"
           />
-          <Animated.View
-            pointerEvents="none"
-            style={[StyleSheet.absoluteFillObject, borderStyle]}
-          />
+          <View pointerEvents="none" style={borderOverlayStyle} />
         </Animated.View>
       </GestureDetector>
 
