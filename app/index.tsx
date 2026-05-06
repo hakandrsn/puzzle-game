@@ -62,7 +62,7 @@ export default function StartScreen() {
 
   const hasSeenOnboarding = useHasSeenOnboarding();
   const onboardingHydrated = useOnboardingHydrated();
-
+  console.log("")
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
