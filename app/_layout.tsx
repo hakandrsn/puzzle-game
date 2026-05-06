@@ -56,28 +56,39 @@ export default function RootLayout() {
                 await getChapters();
 
                 try {
-                    await requestTrackingPermissionsAsync();
-
-                    const consentInfo = await AdsConsent.requestInfoUpdate();
-                    if (
-                        consentInfo.status === AdsConsentStatus.REQUIRED ||
-                        consentInfo.status === AdsConsentStatus.UNKNOWN
-                    ) {
-                        await AdsConsent.showForm();
+                    try {
+                        await requestTrackingPermissionsAsync();
+                    } catch (attError) {
+                        console.warn("ATT Error:", attError);
+                    }
+                    try {
+                        const consentInfo = await AdsConsent.requestInfoUpdate();
+                        if (
+                            consentInfo.status === AdsConsentStatus.REQUIRED ||
+                            consentInfo.status === AdsConsentStatus.UNKNOWN
+                        ) {
+                            await AdsConsent.showForm();
+                        }
+                    } catch (umpError) {
+                        console.warn("UMP Consent Error:", umpError);
                     }
 
-                    initializeAds()
+
                 } catch (error) {
                     console.log("📺 Ad initialization skipped:", error);
                 }
             } catch (e) {
                 console.warn("App init error:", e);
             } finally {
+                try {
+                    initializeAds();
+                } catch (adError) {
+                    console.log("📺 Ad initialization strictly failed:", adError);
+                }
                 // Data is ready, start transitioning out the splash screen
                 setAppIsReady(true);
             }
         }
-
         prepare();
     }, []);
 
