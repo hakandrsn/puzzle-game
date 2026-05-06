@@ -50,6 +50,8 @@ type ScreenHeaderProps = {
   rightSlot?: React.ReactNode;
   /** Varsayılan: güvenli alan üstü + BOARD_PADDING */
   contentStyle?: ViewStyle;
+  /** Başlık sütunu hizası (onboarding için ortalı) */
+  titlesAlign?: "flex-start" | "center";
 };
 
 export default function ScreenHeader({
@@ -59,6 +61,7 @@ export default function ScreenHeader({
   bottomSlot,
   rightSlot,
   contentStyle,
+  titlesAlign = "flex-start",
 }: ScreenHeaderProps) {
   const { top } = useSafeAreaInsets();
 
@@ -83,7 +86,12 @@ export default function ScreenHeader({
               <View style={styles.backPlaceholder} />
             )}
           </View>
-          <View style={styles.headerTitles}>
+          <View
+            style={[
+              styles.headerTitles,
+              titlesAlign === "center" && styles.headerTitlesCenter,
+            ]}
+          >
             {titleNode ?? (
               <Text style={styles.headerTitle}>{title ?? ""}</Text>
             )}
@@ -121,6 +129,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   headerTitles: { flex: 1 },
+  headerTitlesCenter: {
+    alignItems: "center",
+  },
   headerTitle: {
     fontSize: 24,
     fontWeight: "800",
