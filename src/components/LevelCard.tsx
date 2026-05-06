@@ -1,9 +1,11 @@
-import { Ionicons } from "@expo/vector-icons";
+import { LockIcon, StarRatingMini } from "@/src/components/StarCount";
+import { COLORS } from "../constants/gameConfig";
+import { useLockedCardShake } from "@/src/hooks/useLockedCardShake";
+import { Level, LevelProgress } from "../types";
 import { Image } from "expo-image";
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { COLORS } from "../constants/gameConfig";
-import { Level, LevelProgress } from "../types";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
 
 interface LevelCardProps {
   level: Level;
@@ -27,26 +29,39 @@ const LevelCard = React.memo<LevelCardProps>(
     chapterColor,
     onPress,
   }) => {
+    const { shake, shakeStyle } = useLockedCardShake();
+
+    const handlePress = () => {
+      if (!isUnlocked) {
+        shake();
+        return;
+      }
+      onPress();
+    };
+
     return (
       <View style={{ width: cardSize, height: cardSize, alignItems: "center" }}>
-        <TouchableOpacity
-          style={[
-            styles.levelCard,
-            { width: cardSize, height: cardSize },
-            progress?.completed && {
-              borderColor: chapterColor || COLORS.accent,
-              borderWidth: 2,
-            },
-            // Highlight Last Active Level (Furthest Unlocked)
-            isLastActive && {
-              borderColor: COLORS.coral, // Or specific 'Active' color
-              borderWidth: 6,
-            },
-          ]}
-          onPress={onPress}
-          disabled={!isUnlocked}
-          activeOpacity={0.7}
+        <Pressable
+          style={({ pressed }) => ({
+            opacity: isUnlocked && pressed ? 0.92 : 1,
+          })}
+          onPress={handlePress}
         >
+          <Animated.View
+            style={[
+              styles.levelCard,
+              { width: cardSize, height: cardSize },
+              shakeStyle,
+              progress?.completed && {
+                borderColor: chapterColor || COLORS.accent,
+                borderWidth: 2,
+              },
+              isLastActive && {
+                borderColor: COLORS.coral,
+                borderWidth: 6,
+              },
+            ]}
+          >
           {/* Background Image */}
           <Image
             source={level.imageSource}
@@ -68,27 +83,24 @@ const LevelCard = React.memo<LevelCardProps>(
 
               {/* Stars next to number */}
               <View style={styles.starsRowInline}>
-                {[1, 2, 3].map((star) => {
-                  const isFilled =
-                    progress?.completed && star <= (progress?.stars || 0);
-                  return (
-                    <Ionicons
-                      key={star}
-                      name="star"
-                      size={12}
-                      color={isFilled ? "#fbbf24" : "rgba(255,255,255,0.4)"}
-                      style={isFilled && styles.starShadow}
-                    />
-                  );
-                })}
+                <StarRatingMini
+                  filledStars={
+                    progress?.completed
+                      ? Math.min(3, progress.stars ?? 0)
+                      : 0
+                  }
+                  starSize={12}
+                  gap={1}
+                />
               </View>
             </View>
           ) : (
             <View style={styles.centeredContent}>
-              <Text style={styles.lockIcon}>🔒</Text>
+              <LockIcon size={28} />
             </View>
           )}
-        </TouchableOpacity>
+          </Animated.View>
+        </Pressable>
       </View>
     );
   },
@@ -140,19 +152,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 1,
   },
-  lockIcon: {
-    fontSize: 24,
-  },
   centeredContent: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
-  starShadow: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 1,
   },
 });
 

@@ -11,14 +11,16 @@ import {
 } from "@/src/store/dataStore";
 import { useProgressActions, useTotalStars } from "@/src/store/progressStore";
 import { Chapter } from "@/src/types";
+import ScreenHeader, {
+  ScreenHeaderStarsPill,
+} from "@/src/components/ScreenHeader";
 import { LegendList } from "@legendapp/list";
-import { Stack, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   InteractionManager,
   StyleSheet,
-  Text,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -133,19 +135,10 @@ export default function ChaptersScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: "Bölümler",
-          headerStyle: { backgroundColor: COLORS.background },
-          headerTintColor: COLORS.textPrimary,
-          headerShadowVisible: false,
-          headerRight: () => (
-            <View style={styles.headerStars}>
-              <Text style={styles.headerStarIcon}>★</Text>
-              <Text style={styles.headerStarText}>{totalStars}</Text>
-            </View>
-          ),
-        }}
+      <ScreenHeader
+        title="Bölümler"
+        onBack={() => router.back()}
+        rightSlot={<ScreenHeaderStarsPill value={totalStars} />}
       />
 
       <LegendList
@@ -167,21 +160,6 @@ const styles = StyleSheet.create({
   chapterRow: {
     flexDirection: "row",
     justifyContent: "flex-start",
-  },
-  headerStars: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
-  },
-  headerStarIcon: { fontSize: 16, color: COLORS.starFilled },
-  headerStarText: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: COLORS.textPrimary,
   },
   listContent: { paddingBottom: 40 },
 });

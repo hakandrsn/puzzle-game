@@ -1,6 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import LottieView from "lottie-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -23,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Stores & Hooks
 import { calculateStars, COLORS } from "@/src/constants/gameConfig";
+import { StarIcon } from "@/src/components/StarCount";
 import { useJigsawStore } from "@/src/modules/jigsaw/jigsawStore";
 import { useAdStore } from "@/src/store/adStore";
 import { useDataActions } from "@/src/store/dataStore";
@@ -451,7 +451,6 @@ export default function JigsawGameScreen() {
     <GestureHandlerRootView
       style={{ flex: 1, backgroundColor: COLORS.background }}
     >
-      <Stack.Screen options={{ headerShown: false }} />
       <BackgroundMusic />
 
       <View style={{ flex: 1, backgroundColor: COLORS.background }}>
@@ -505,13 +504,7 @@ export default function JigsawGameScreen() {
                         : star3Style
                   }
                 >
-                  <Ionicons
-                    name="star"
-                    size={40}
-                    color={
-                      earnedStars >= star ? COLORS.starFilled : COLORS.starEmpty
-                    }
-                  />
+                  <StarIcon size={40} dimmed={earnedStars < star} />
                 </Animated.View>
               ))}
             </View>

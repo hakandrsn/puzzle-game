@@ -100,44 +100,31 @@ export default function RootLayout() {
 
                     {/* Main App Content - Rendered but covered by Splash until ready */}
                     {appIsReady && (
-                        <Stack>
-                            <Stack.Screen name="index" options={{headerShown: false}}/>
+                        <Stack
+                            screenOptions={{
+                                headerShown: false,
+                                contentStyle: {backgroundColor: COLORS.background},
+                            }}
+                        >
+                            <Stack.Screen name="index"/>
                             <Stack.Screen
                                 name="chapters"
-                                options={{
-                                    title: "Bölümler",
-                                    headerStyle: {backgroundColor: COLORS.background},
-                                    headerTintColor: COLORS.textPrimary,
-                                    headerTitleStyle: {
-                                        fontWeight: "600",
-                                        color: COLORS.textPrimary,
-                                    },
-                                    contentStyle: {backgroundColor: COLORS.background},
-                                    headerShadowVisible: false,
-                                    animation: "slide_from_right",
-                                    headerShown: true,
-                                }}
+                                options={{animation: "slide_from_right"}}
                             />
                             <Stack.Screen
                                 name="levels/[chapterId]"
                                 options={{
-                                    title: "Seviyeler",
                                     animation: "slide_from_right",
-                                    headerShown: false,
                                     freezeOnBlur: true,
                                 }}
                             />
                             <Stack.Screen
                                 name="game/jigsaw/[chapterId]/[levelId]"
-                                options={{
-                                    headerShown: false,
-                                    animation: "slide_from_right",
-                                }}
+                                options={{animation: "slide_from_right"}}
                             />
                             <Stack.Screen
                                 name="onboarding/index"
                                 options={{
-                                    headerShown: false,
                                     animation: "fade",
                                     gestureEnabled: false,
                                 }}

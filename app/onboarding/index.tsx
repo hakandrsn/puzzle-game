@@ -1,5 +1,6 @@
+import ScreenHeader from "@/src/components/ScreenHeader";
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   StyleSheet,
@@ -57,42 +58,41 @@ export default function OnboardingScreen() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-        {/* Top bar with Skip */}
-        <View style={styles.topBar}>
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity
-            onPress={handleSkip}
-            style={styles.skipBtn}
-            activeOpacity={0.7}
-            hitSlop={10}
-          >
-            <Text style={styles.skipText}>Atla</Text>
-            <Ionicons
-              name="close"
-              size={18}
-              color={COLORS.textPrimary}
-              style={{ marginLeft: 4 }}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Heading */}
-        <View style={styles.headingBlock}>
-          <Animated.Text
-            entering={FadeInDown.duration(450)}
-            style={styles.title}
-          >
-            Nasıl Oynanır
-          </Animated.Text>
-          <Animated.Text
-            entering={FadeInDown.delay(150).duration(450)}
-            style={styles.subtitle}
-          >
-            Parçaları doğru yerlerine sürükle
-          </Animated.Text>
-        </View>
+      <SafeAreaView style={styles.safe} edges={["bottom"]}>
+        <ScreenHeader
+          titleNode={
+            <Animated.Text
+              entering={FadeInDown.duration(450)}
+              style={styles.title}
+            >
+              Nasıl Oynanır
+            </Animated.Text>
+          }
+          rightSlot={
+            <TouchableOpacity
+              onPress={handleSkip}
+              style={styles.skipBtn}
+              activeOpacity={0.7}
+              hitSlop={10}
+            >
+              <Text style={styles.skipText}>Atla</Text>
+              <Ionicons
+                name="close"
+                size={18}
+                color={COLORS.textPrimary}
+                style={{ marginLeft: 4 }}
+              />
+            </TouchableOpacity>
+          }
+          bottomSlot={
+            <Animated.Text
+              entering={FadeInDown.delay(150).duration(450)}
+              style={styles.subtitle}
+            >
+              Parçaları doğru yerlerine sürükle
+            </Animated.Text>
+          }
+        />
 
         {/* Demo board */}
         <View style={styles.boardWrap}>
@@ -165,11 +165,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
   },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 44,
-  },
   skipBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -184,11 +179,6 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: 14,
     fontWeight: "600",
-  },
-  headingBlock: {
-    alignItems: "center",
-    marginTop: 8,
-    marginBottom: 24,
   },
   title: {
     fontSize: 26,
@@ -206,6 +196,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 8,
   },
   bottomBlock: {
     alignItems: "center",
