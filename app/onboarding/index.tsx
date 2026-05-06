@@ -1,6 +1,6 @@
 import ScreenHeader from "@/src/components/ScreenHeader";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import {Stack, useRouter} from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   StyleSheet,
@@ -34,7 +34,8 @@ export default function OnboardingScreen() {
   const [placedCount, setPlacedCount] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
 
-  const containerWidth = Math.min(width - 32, 360);
+  // Single big board - takes most of screen width, capped to a sensible max
+  const boardSize = Math.min(width - 32, 380);
 
   const handleSkip = useCallback(() => {
     playClick();
@@ -58,46 +59,47 @@ export default function OnboardingScreen() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <SafeAreaView style={styles.safe} edges={["bottom"]}>
-        <ScreenHeader
-          titleNode={
-            <Animated.Text
-              entering={FadeInDown.duration(450)}
-              style={styles.title}
-            >
-              Nasıl Oynanır
-            </Animated.Text>
-          }
-          rightSlot={
-            <TouchableOpacity
-              onPress={handleSkip}
-              style={styles.skipBtn}
-              activeOpacity={0.7}
-              hitSlop={10}
-            >
-              <Text style={styles.skipText}>Atla</Text>
-              <Ionicons
-                name="close"
-                size={18}
-                color={COLORS.textPrimary}
-                style={{ marginLeft: 4 }}
-              />
-            </TouchableOpacity>
-          }
-          bottomSlot={
-            <Animated.Text
-              entering={FadeInDown.delay(150).duration(450)}
-              style={styles.subtitle}
-            >
-              Parçaları doğru yerlerine sürükle
-            </Animated.Text>
-          }
-        />
+      <Stack.Screen options={{ headerShown: false }} />
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+        {/* Top bar with Skip */}
+        <View style={styles.topBar}>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity
+            onPress={handleSkip}
+            style={styles.skipBtn}
+            activeOpacity={0.7}
+            hitSlop={10}
+          >
+            <Text style={styles.skipText}>Atla</Text>
+            <Ionicons
+              name="close"
+              size={18}
+              color={COLORS.textPrimary}
+              style={{ marginLeft: 4 }}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Heading */}
+        <View style={styles.headingBlock}>
+          <Animated.Text
+            entering={FadeInDown.duration(450)}
+            style={styles.title}
+          >
+            Nasıl Oynanır
+          </Animated.Text>
+          <Animated.Text
+            entering={FadeInDown.delay(150).duration(450)}
+            style={styles.subtitle}
+          >
+            Parçaları yer değiştirerek tamamla
+          </Animated.Text>
+        </View>
 
         {/* Demo board */}
         <View style={styles.boardWrap}>
           <OnboardingDemoBoard
-            containerWidth={containerWidth}
+            boardSize={boardSize}
             onProgress={handleProgress}
             onComplete={handleComplete}
           />
@@ -147,7 +149,7 @@ export default function OnboardingScreen() {
               entering={FadeIn.delay(300)}
               style={styles.hintText}
             >
-              Parmağı takip et ve parçayı sürükle
+              Parmağı takip et: parçayı doğru yerine taşı
             </Animated.Text>
           )}
         </View>
@@ -165,6 +167,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
   },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 44,
+  },
   skipBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -179,6 +186,11 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: 14,
     fontWeight: "600",
+  },
+  headingBlock: {
+    alignItems: "center",
+    marginTop: 8,
+    marginBottom: 24,
   },
   title: {
     fontSize: 26,
@@ -196,7 +208,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 8,
   },
   bottomBlock: {
     alignItems: "center",

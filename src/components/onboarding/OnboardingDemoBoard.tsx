@@ -1,5 +1,5 @@
 import { Image } from "expo-image";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { COLORS } from "@/src/constants/colors";
@@ -12,121 +12,153 @@ const GRID_ROWS = 2;
 const GRID_COLS = 2;
 
 interface OnboardingDemoBoardProps {
-  containerWidth: number;
+  boardSize: number;
   onComplete: () => void;
   onProgress?: (placedCount: number) => void;
 }
 
-interface PieceLayout {
+interface PieceState {
   id: number;
   imageRow: number;
   imageCol: number;
-  targetX: number;
-  targetY: number;
-  startX: number;
-  startY: number;
+  correctRow: number;
+  correctCol: number;
+  row: number;
+  col: number;
+  isPlaced: boolean;
 }
 
+// Deterministic 4-cycle scramble (always identical):
+//   correct: 0->(0,0) 1->(0,1) 2->(1,0) 3->(1,1)
+//   start:   0@(0,1) 1@(1,0) 2@(1,1) 3@(0,0)
+// Solvable in 3 swaps.
+const buildInitialPieces = (): PieceState[] => [
+  {
+    id: 0,
+    imageRow: 0,
+    imageCol: 0,
+    correctRow: 0,
+    correctCol: 0,
+    row: 0,
+    col: 1,
+    isPlaced: false,
+  },
+  {
+    id: 1,
+    imageRow: 0,
+    imageCol: 1,
+    correctRow: 0,
+    correctCol: 1,
+    row: 1,
+    col: 0,
+    isPlaced: false,
+  },
+  {
+    id: 2,
+    imageRow: 1,
+    imageCol: 0,
+    correctRow: 1,
+    correctCol: 0,
+    row: 1,
+    col: 1,
+    isPlaced: false,
+  },
+  {
+    id: 3,
+    imageRow: 1,
+    imageCol: 1,
+    correctRow: 1,
+    correctCol: 1,
+    row: 0,
+    col: 0,
+    isPlaced: false,
+  },
+];
+
 const OnboardingDemoBoard: React.FC<OnboardingDemoBoardProps> = ({
-  containerWidth,
+  boardSize,
   onComplete,
   onProgress,
 }) => {
-  const TRAY_GAP_X = 10;
-  const BOARD_TRAY_GAP = 36;
+  const pieceSize = boardSize / GRID_COLS;
 
-  const pieceSize = Math.floor((containerWidth - TRAY_GAP_X * 3) / 4);
-  const boardSize = pieceSize * GRID_COLS;
-  const boardLeft = (containerWidth - boardSize) / 2;
-  const trayY = boardSize + BOARD_TRAY_GAP;
-  const trayWidth = pieceSize * 4 + TRAY_GAP_X * 3;
-  const trayLeft = (containerWidth - trayWidth) / 2;
-
-  const totalHeight = trayY + pieceSize;
-
-  // Fixed deterministic layout (always the same for every onboarding viewing)
-  // pieceId -> imageRow/imageCol (which slice of source image)
-  // Sequential active order: 0 -> 1 -> 2 -> 3
-  const pieces: PieceLayout[] = [
-    {
-      id: 0,
-      imageRow: 0,
-      imageCol: 0,
-      targetX: boardLeft + 0 * pieceSize,
-      targetY: 0 * pieceSize,
-      startX: trayLeft + 0 * (pieceSize + TRAY_GAP_X),
-      startY: trayY,
-    },
-    {
-      id: 1,
-      imageRow: 0,
-      imageCol: 1,
-      targetX: boardLeft + 1 * pieceSize,
-      targetY: 0 * pieceSize,
-      startX: trayLeft + 1 * (pieceSize + TRAY_GAP_X),
-      startY: trayY,
-    },
-    {
-      id: 2,
-      imageRow: 1,
-      imageCol: 0,
-      targetX: boardLeft + 0 * pieceSize,
-      targetY: 1 * pieceSize,
-      startX: trayLeft + 2 * (pieceSize + TRAY_GAP_X),
-      startY: trayY,
-    },
-    {
-      id: 3,
-      imageRow: 1,
-      imageCol: 1,
-      targetX: boardLeft + 1 * pieceSize,
-      targetY: 1 * pieceSize,
-      startX: trayLeft + 3 * (pieceSize + TRAY_GAP_X),
-      startY: trayY,
-    },
-  ];
-
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [placedSet, setPlacedSet] = useState<Set<number>>(new Set());
+  const [pieces, setPieces] = useState<PieceState[]>(buildInitialPieces);
 
   const { playClick } = useClickSound();
 
-  const handlePiecePlaced = useCallback(
-    (pieceId: number) => {
-      playClick();
-      setPlacedSet((prev) => {
-        if (prev.has(pieceId)) return prev;
-        const next = new Set(prev);
-        next.add(pieceId);
-        const placedCount = next.size;
-        onProgress?.(placedCount);
-        if (placedCount >= pieces.length) {
-          setTimeout(() => onComplete(), 350);
+  // Active piece = first not-yet-placed piece (deterministic ordering by id)
+  const activeId = useMemo(() => {
+    const target = pieces.find((p) => !p.isPlaced);
+    return target ? target.id : null;
+  }, [pieces]);
+
+  const handleDrop = useCallback(
+    (draggedId: number, dropRow: number, dropCol: number) => {
+      setPieces((prev) => {
+        const dragged = prev.find((p) => p.id === draggedId);
+        if (!dragged || dragged.isPlaced) return prev;
+
+        // Same slot: nothing to do
+        if (dragged.row === dropRow && dragged.col === dropCol) return prev;
+
+        const occupant = prev.find(
+          (p) =>
+            p.id !== draggedId && p.row === dropRow && p.col === dropCol,
+        );
+
+        // Cannot push a locked (already placed) piece
+        if (occupant && occupant.isPlaced) return prev;
+
+        const fromRow = dragged.row;
+        const fromCol = dragged.col;
+
+        const next = prev.map((p) => {
+          if (p.id === draggedId) {
+            const placed =
+              dropRow === p.correctRow && dropCol === p.correctCol;
+            return { ...p, row: dropRow, col: dropCol, isPlaced: placed };
+          }
+          if (occupant && p.id === occupant.id) {
+            const placed = fromRow === p.correctRow && fromCol === p.correctCol;
+            return { ...p, row: fromRow, col: fromCol, isPlaced: placed };
+          }
+          return p;
+        });
+
+        const placedCount = next.filter((p) => p.isPlaced).length;
+        const prevPlacedCount = prev.filter((p) => p.isPlaced).length;
+
+        if (placedCount > prevPlacedCount) {
+          playClick();
         }
+
+        if (onProgress) {
+          // Defer to avoid setState-in-render warning
+          setTimeout(() => onProgress(placedCount), 0);
+        }
+
+        if (placedCount === next.length) {
+          setTimeout(() => onComplete(), 400);
+        }
+
         return next;
       });
-      setActiveIndex((prev) => Math.min(prev + 1, pieces.length - 1));
     },
-    [onComplete, onProgress, pieces.length, playClick],
+    [onComplete, onProgress, playClick],
   );
 
   return (
     <View
       style={[
         styles.container,
-        { width: containerWidth, height: totalHeight },
+        { width: boardSize, height: boardSize },
       ]}
     >
-      {/* Faint board background showing target image - same pattern as real game */}
+      {/* Faint board background showing target image */}
       <View
         style={[
           styles.boardGhost,
-          {
-            left: boardLeft,
-            top: 0,
-            width: boardSize,
-            height: boardSize,
-          },
+          { width: boardSize, height: boardSize },
         ]}
       >
         <Image
@@ -137,53 +169,44 @@ const OnboardingDemoBoard: React.FC<OnboardingDemoBoardProps> = ({
         />
       </View>
 
-      {/* Target slot outlines */}
-      {pieces.map((p) => (
-        <View
-          key={`slot-${p.id}`}
-          style={[
-            styles.slotOutline,
-            {
-              left: p.targetX,
-              top: p.targetY,
-              width: pieceSize,
-              height: pieceSize,
-            },
-          ]}
-        />
-      ))}
-
-      {/* Tray background strip */}
-      <View
-        style={[
-          styles.trayStrip,
-          {
-            left: trayLeft - 8,
-            top: trayY - 8,
-            width: trayWidth + 16,
-            height: pieceSize + 16,
-          },
-        ]}
-      />
+      {/* Slot outlines */}
+      {Array.from({ length: GRID_ROWS * GRID_COLS }).map((_, idx) => {
+        const r = Math.floor(idx / GRID_COLS);
+        const c = idx % GRID_COLS;
+        return (
+          <View
+            key={`slot-${idx}`}
+            style={[
+              styles.slotOutline,
+              {
+                left: c * pieceSize,
+                top: r * pieceSize,
+                width: pieceSize,
+                height: pieceSize,
+              },
+            ]}
+          />
+        );
+      })}
 
       {/* Pieces */}
-      {pieces.map((p, idx) => (
+      {pieces.map((p) => (
         <OnboardingPiece
           key={p.id}
           pieceId={p.id}
           imageRow={p.imageRow}
           imageCol={p.imageCol}
-          startX={p.startX}
-          startY={p.startY}
-          targetX={p.targetX}
-          targetY={p.targetY}
+          correctRow={p.correctRow}
+          correctCol={p.correctCol}
+          currentRow={p.row}
+          currentCol={p.col}
           pieceSize={pieceSize}
           gridRows={GRID_ROWS}
           gridCols={GRID_COLS}
           imageSource={DEMO_IMAGE}
-          isActive={idx === activeIndex && !placedSet.has(p.id)}
-          isPlaced={placedSet.has(p.id)}
-          onPlaced={() => handlePiecePlaced(p.id)}
+          isActive={activeId === p.id}
+          isPlaced={p.isPlaced}
+          onDrop={handleDrop}
         />
       ))}
     </View>
@@ -194,12 +217,19 @@ const styles = StyleSheet.create({
   container: {
     position: "relative",
     alignSelf: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 8,
+    overflow: "visible",
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   boardGhost: {
     position: "absolute",
+    left: 0,
+    top: 0,
     opacity: 0.18,
-    borderRadius: 6,
     overflow: "hidden",
+    borderRadius: 6,
   },
   slotOutline: {
     position: "absolute",
@@ -207,13 +237,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.55)",
     borderStyle: "dashed",
     borderRadius: 4,
-  },
-  trayStrip: {
-    position: "absolute",
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
 });
 
