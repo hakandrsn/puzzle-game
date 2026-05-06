@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons"; // Need to check if Feather/MaterialIcons fit better or stick to Ionicons
 import Slider from "@react-native-community/slider";
+import { useRouter } from "expo-router";
 import React from "react";
 import {
   Modal,
@@ -22,6 +23,8 @@ const GameSettingsMenu: React.FC<GameSettingsMenuProps> = ({
   visible,
   onClose,
 }) => {
+  const router = useRouter();
+
   const {
     hapticsEnabled,
     musicEnabled,
@@ -36,6 +39,11 @@ const GameSettingsMenu: React.FC<GameSettingsMenuProps> = ({
       setSoundVolume,
     },
   } = useSettingsStore();
+
+  const handleOpenOnboarding = () => {
+    onClose();
+    setTimeout(() => router.push("/onboarding" as any), 150);
+  };
 
   return (
     <Modal
@@ -167,6 +175,29 @@ const GameSettingsMenu: React.FC<GameSettingsMenuProps> = ({
                     />
                   </View>
                 )}
+              </View>
+
+              {/* How to Play */}
+              <View style={[styles.settingBlock, { marginBottom: 0 }]}>
+                <TouchableOpacity
+                  style={styles.row}
+                  activeOpacity={0.6}
+                  onPress={handleOpenOnboarding}
+                >
+                  <View style={styles.labelContainer}>
+                    <Ionicons
+                      name="help-circle-outline"
+                      size={22}
+                      color={COLORS.textPrimary}
+                    />
+                    <Text style={styles.label}>Nasıl Oynanır</Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={COLORS.textSecondary}
+                  />
+                </TouchableOpacity>
               </View>
             </View>
           </TouchableWithoutFeedback>

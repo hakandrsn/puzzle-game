@@ -8,6 +8,10 @@ import { useClickSound } from "@/src/hooks/useClickSound";
 import { useAdActions } from "@/src/store/adStore";
 import { useChapters, useDataActions } from "@/src/store/dataStore";
 import {
+  useHasSeenOnboarding,
+  useOnboardingHydrated,
+} from "@/src/store/onboardingStore";
+import {
   useProgressActions,
   useProgressStore,
   useTotalCoins,
@@ -56,7 +60,17 @@ export default function StartScreen() {
 
   const { getNextPlayableLevel } = useProgressActions();
 
+  const hasSeenOnboarding = useHasSeenOnboarding();
+  const onboardingHydrated = useOnboardingHydrated();
+
   const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    if (!isReady || !onboardingHydrated) return;
+    if (!hasSeenOnboarding) {
+      router.replace("/onboarding" as any);
+    }
+  }, [isReady, onboardingHydrated, hasSeenOnboarding, router]);
 
   useEffect(() => {
     const initGame = async () => {
