@@ -1,15 +1,29 @@
 import { Image } from "expo-image";
-import React, { useCallback, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { StyleSheet, View } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
-import { COLORS } from "@/src/constants/colors";
 import { useClickSound } from "@/src/hooks/useClickSound";
 import OnboardingPiece from "./OnboardingPiece";
 
-const DEMO_IMAGE = require("@/src/assets/images/splash-icon.png");
+const DEMO_IMAGE = require("@/src/assets/images/onboarding-demo.webp");
 
 const GRID_ROWS = 2;
 const GRID_COLS = 2;
+
+/** Hayalet + slot solması; buton bu süreden sonra gösterilir */
+const CELEBRATE_MS = 520;
+const ON_COMPLETE_AFTER_MS = CELEBRATE_MS + 140;
 
 interface OnboardingDemoBoardProps {
   boardSize: number;
@@ -84,7 +98,33 @@ const OnboardingDemoBoard: React.FC<OnboardingDemoBoardProps> = ({
 
   const [pieces, setPieces] = useState<PieceState[]>(buildInitialPieces);
 
+  const celebrate = useSharedValue(0);
+
   const { playClick } = useClickSound();
+
+  const allPlaced = useMemo(
+    () => pieces.length > 0 && pieces.every((p) => p.isPlaced),
+    [pieces],
+  );
+
+  useEffect(() => {
+    if (allPlaced) {
+      celebrate.value = withTiming(1, {
+        duration: CELEBRATE_MS,
+        easing: Easing.out(Easing.cubic),
+      });
+    } else {
+      celebrate.value = 0;
+    }
+  }, [allPlaced]);
+
+  const ghostAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: 0.26 + celebrate.value * 0.74,
+  }));
+
+  const slotsAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: 1 - celebrate.value,
+  }));
 
   // Active piece = first not-yet-placed piece (deterministic ordering by id)
   const activeId = useMemo(() => {
@@ -160,16 +200,16 @@ const OnboardingDemoBoard: React.FC<OnboardingDemoBoardProps> = ({
         const prevPlacedCount = prev.filter((p) => p.isPlaced).length;
 
         if (placedCount > prevPlacedCount) {
-          playClick();
+          queueMicrotask(() => playClick());
         }
 
         if (onProgress) {
-          // Defer to avoid setState-in-render warning
-          setTimeout(() => onProgress(placedCount), 0);
+          const pc = placedCount;
+          requestAnimationFrame(() => onProgress(pc));
         }
 
         if (placedCount === next.length) {
-          setTimeout(() => onComplete(), 400);
+          setTimeout(() => onComplete(), ON_COMPLETE_AFTER_MS);
         }
 
         return next;
@@ -185,11 +225,12 @@ const OnboardingDemoBoard: React.FC<OnboardingDemoBoardProps> = ({
         { width: boardSize, height: boardSize },
       ]}
     >
-      {/* Faint board background showing target image */}
-      <View
+      {/* Arka plan görseli — tamamlanınca opacity ile yumuşak belirir */}
+      <Animated.View
         style={[
           styles.boardGhost,
           { width: boardSize, height: boardSize },
+          ghostAnimatedStyle,
         ]}
       >
         <Image
@@ -198,27 +239,36 @@ const OnboardingDemoBoard: React.FC<OnboardingDemoBoardProps> = ({
           contentFit="cover"
           cachePolicy="memory-disk"
         />
-      </View>
+      </Animated.View>
 
-      {/* Slot outlines */}
-      {Array.from({ length: GRID_ROWS * GRID_COLS }).map((_, idx) => {
-        const r = Math.floor(idx / GRID_COLS);
-        const c = idx % GRID_COLS;
-        return (
-          <View
-            key={`slot-${idx}`}
-            style={[
-              styles.slotOutline,
-              {
-                left: c * pieceSize,
-                top: r * pieceSize,
-                width: pieceSize,
-                height: pieceSize,
-              },
-            ]}
-          />
-        );
-      })}
+      {/* Slot çizgileri — tamamlanınca solar */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.slotsLayer,
+          { width: boardSize, height: boardSize },
+          slotsAnimatedStyle,
+        ]}
+      >
+        {Array.from({ length: GRID_ROWS * GRID_COLS }).map((_, idx) => {
+          const r = Math.floor(idx / GRID_COLS);
+          const c = idx % GRID_COLS;
+          return (
+            <View
+              key={`slot-${idx}`}
+              style={[
+                styles.slotOutline,
+                {
+                  left: c * pieceSize,
+                  top: r * pieceSize,
+                  width: pieceSize,
+                  height: pieceSize,
+                },
+              ]}
+            />
+          );
+        })}
+      </Animated.View>
 
       {/* Pieces */}
       {pieces.map((p) => {
@@ -244,6 +294,7 @@ const OnboardingDemoBoard: React.FC<OnboardingDemoBoardProps> = ({
             hasNeighborLeft={conn.left}
             hasNeighborRight={conn.right}
             onDrop={handleDrop}
+            celebrateSV={celebrate}
           />
         );
       })}
@@ -255,26 +306,28 @@ const styles = StyleSheet.create({
   container: {
     position: "relative",
     alignSelf: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: 8,
+    borderRadius: 14,
     overflow: "visible",
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    zIndex: 0,
   },
   boardGhost: {
     position: "absolute",
     left: 0,
     top: 0,
-    opacity: 0.18,
     overflow: "hidden",
-    borderRadius: 6,
+    borderRadius: 12,
+  },
+  slotsLayer: {
+    position: "absolute",
+    left: 0,
+    top: 0,
   },
   slotOutline: {
     position: "absolute",
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.26)",
     borderStyle: "dashed",
-    borderRadius: 4,
+    borderRadius: 6,
   },
 });
 

@@ -1,5 +1,5 @@
 import { COLORS } from "@/src/constants/gameConfig";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -12,7 +12,6 @@ interface LevelCompleteOverlayProps {
 }
 
 const LevelCompleteOverlay: React.FC<LevelCompleteOverlayProps> = ({
-  visible,
   animatedStyle,
   onNext,
   onReplay,

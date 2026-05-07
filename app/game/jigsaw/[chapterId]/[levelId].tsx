@@ -35,6 +35,7 @@ import GameStats from "@/src/components/game/GameStats";
 import LevelCompleteOverlay from "@/src/components/game/LevelCompleteOverlay";
 
 import { useClickSound } from "@/src/hooks/useClickSound";
+import { useInterstitialPlaytime } from "@/src/hooks/useInterstitialPlaytime";
 import JigsawBoard from "@/src/modules/jigsaw/JigsawBoard";
 import { showInterstitial } from "@/src/services/adManager";
 import { useProgressActions } from "@/src/store/progressStore";
@@ -71,15 +72,18 @@ export default function JigsawGameScreen() {
   const { getLevelById, getChapters, getChapterById } = useDataActions();
   const { completeLevel, setLastPlayed, unlockChapter } = useProgressActions();
   const resetGame = useJigsawStore((state) => state.actions.resetGame);
+  const devSolveLevel = useJigsawStore((state) => state.actions.devSolveLevel);
   const status = useJigsawStore((state) => state.status);
   const moves = useJigsawStore((state) => state.moves);
   const initializeLevel = useJigsawStore(
     (state) => state.actions.initializeLevel,
   );
-  const canShowBanner = useAdStore((state) => state.actions.canShowBanner);
+
+  const {
+    flushPlaytime,
+  } = useInterstitialPlaytime();
 
   const [level, setLevel] = useState<Level | undefined>();
-  const [prevLevel, setPrevLevel] = useState<Level | undefined>(); // For visual transition
   const [isLoading, setIsLoading] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
   const [showContinue, setShowContinue] = useState(false);
@@ -270,15 +274,25 @@ export default function JigsawGameScreen() {
 
     const nextLevelPromise = getLevelById(nextChapter, nextLevelId);
 
-    // Reklamı başlat (Bu sırada nextLevelPromise arkada resolve oluyor)
-    // İki aşamalı reklam mantığı:
-    // 1. Chapter 1, Level 1-4: Reklam yok (yeni kullanıcı deneyimi)
-    // 2. Chapter 1, Level 5+: İlk reklam gösterilir, 5 dakika timer başlar
-    // 3. Sonraki reklamlar: 5 dakika geçtiyse göster
+    // Interstitial: oyun ekranında birikmiş "aktif" süre eşiği dolunca ve reklam yüklüyse gösterilir.
     const isEligibleForAds = currentChapter !== 1 || currentLevelId >= 4;
 
     if (isEligibleForAds) {
-      // 5 dakika kontrolü yap - ilk kez çağrıldığında lastInterstitialShown=0 olduğu için hep true döner
+      flushPlaytime();
+      if (__DEV__) {
+        const s = useAdStore.getState();
+        const rulesOk = s.actions.interstitialEligibleByRules(
+          currentChapter,
+          currentLevelId,
+        );
+        console.log("📺 [dev] interstitial gate", {
+          playtimeMs: s.interstitialPlaytimeAccumMs,
+          ready: s.isInterstitialReady,
+          rulesOk,
+          chapter: currentChapter,
+          level: currentLevelId,
+        });
+      }
       const canShow = useAdStore
         .getState()
         .actions.canShowInterstitial(currentChapter, currentLevelId);
@@ -489,7 +503,13 @@ export default function JigsawGameScreen() {
             // height removed, use natural
             movesAnimatedStyle={movesAnimatedStyle}
           />
-
+      {/*    <Text style={styles.playtimeHint} numberOfLines={1}>
+            Aktif oyun: {formattedTotal} / {formattedThreshold}
+            {msUntilAd > 0
+              ? ` (${formattedUntilAd} kalan)`
+              : " — süre eşiği doldu"}
+          </Text>
+*/}
           {/* Stars Area */}
           <Animated.View style={starsAnimatedStyle}>
             <View style={{ flexDirection: "row", gap: 4 }}>
@@ -592,6 +612,22 @@ export default function JigsawGameScreen() {
       </View>
 
       {/* GLOBAL MODALS */}
+      {__DEV__ && status === "playing" && level && !isLoading && (
+        <TouchableOpacity
+          style={[
+            styles.devSolveFab,
+            {
+              bottom: BANNER_HEIGHT + insets.bottom + 16,
+              right: 12,
+            },
+          ]}
+          onPress={devSolveLevel}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.devSolveFabText}>Hızlı çöz (dev)</Text>
+        </TouchableOpacity>
+      )}
+
       <Modal
         visible={showPreview}
         transparent
@@ -668,5 +704,27 @@ const styles = StyleSheet.create({
   confettiContainer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: -1,
+  },
+  playtimeHint: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 2,
+    paddingHorizontal: 12,
+    textAlign: "center",
+  },
+  devSolveFab: {
+    position: "absolute",
+    zIndex: 200,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.textMuted,
+  },
+  devSolveFabText: {
+    color: COLORS.accent,
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

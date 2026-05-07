@@ -7,7 +7,10 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "env": "npx eas env:pull"
+    "env": "npx eas env:pull",
+    "update:prod": "npx eas update --channel production",
+    "update:preview": "npx eas update --channel preview",
+    "update:dev": "npx eas update --channel development"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

@@ -1,7 +1,5 @@
 import {COLORS} from "@/src/constants/colors";
-import {initializeAds} from "@/src/services/adManager";
 import {loginWithDevice} from "@/src/services/authService";
-import {getDeviceId} from "@/src/services/deviceService";
 import {useAdActions} from "@/src/store/adStore";
 import {useProgressActions} from "@/src/store/progressStore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -15,9 +13,8 @@ import {useEffect, useState} from "react";
 import {StyleSheet, View} from "react-native";
 import {SafeAreaProvider} from "react-native-safe-area-context";
 import CustomSplashScreen from "../src/components/CustomSplashScreen";
-import {requestTrackingPermissionsAsync} from "expo-tracking-transparency";
 import {setupSyncListener} from "@/src/services/syncQueue";
-import {AdsConsent, AdsConsentStatus} from "react-native-google-mobile-ads";
+import {runMobileAdsSetup} from "@/src/services/runMobileAdsSetup";
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -56,39 +53,18 @@ export default function RootLayout() {
                 await getChapters();
 
                 try {
-                    try {
-                        await requestTrackingPermissionsAsync();
-                    } catch (attError) {
-                        console.warn("ATT Error:", attError);
-                    }
-                    try {
-                        const consentInfo = await AdsConsent.requestInfoUpdate();
-                        if (
-                            consentInfo.status === AdsConsentStatus.REQUIRED ||
-                            consentInfo.status === AdsConsentStatus.UNKNOWN
-                        ) {
-                            await AdsConsent.showForm();
-                        }
-                    } catch (umpError) {
-                        console.warn("UMP Consent Error:", umpError);
-                    }
-
-
+                    await runMobileAdsSetup();
                 } catch (error) {
                     console.log("📺 Ad initialization skipped:", error);
                 }
             } catch (e) {
                 console.warn("App init error:", e);
             } finally {
-                try {
-                    initializeAds();
-                } catch (adError) {
-                    console.log("📺 Ad initialization strictly failed:", adError);
-                }
                 // Data is ready, start transitioning out the splash screen
                 setAppIsReady(true);
             }
         }
+
         prepare();
     }, []);
 

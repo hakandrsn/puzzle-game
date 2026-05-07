@@ -1,8 +1,10 @@
-import { Ionicons } from "@expo/vector-icons"; // Need to check if Feather/MaterialIcons fit better or stick to Ionicons
+import Ionicons from "@expo/vector-icons/Ionicons";
 import Slider from "@react-native-community/slider";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Modal,
   StyleSheet,
   Switch,
@@ -11,7 +13,8 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { COLORS } from "../constants/gameConfig";
+import { COLORS } from "@/src/constants/colors";
+import { useAppUpdate } from "../hooks/useAppUpdate";
 import { useSettingsStore } from "../store/settingsStore";
 
 interface GameSettingsMenuProps {
@@ -39,6 +42,23 @@ const GameSettingsMenu: React.FC<GameSettingsMenuProps> = ({
       setSoundVolume,
     },
   } = useSettingsStore();
+
+  const { supported: updatesSupported, busy: updateBusy, checkAndApplyUpdate } =
+    useAppUpdate();
+
+  const handleCheckForUpdate = async () => {
+    const result = await checkAndApplyUpdate();
+    if (result.kind === "no_update") {
+      Alert.alert("Güncelleme", "Uygulamanız güncel.");
+    } else if (result.kind === "unsupported") {
+      Alert.alert(
+        "Güncelleme",
+        "Bu ortamda uygulama içi güncelleme kullanılamıyor.",
+      );
+    } else if (result.kind === "error") {
+      Alert.alert("Güncelleme", result.message);
+    }
+  };
 
   const handleOpenOnboarding = () => {
     onClose();
@@ -176,6 +196,38 @@ const GameSettingsMenu: React.FC<GameSettingsMenuProps> = ({
                   </View>
                 )}
               </View>
+
+              {updatesSupported ? (
+                <View style={styles.settingBlock}>
+                  <TouchableOpacity
+                    style={styles.row}
+                    activeOpacity={0.6}
+                    onPress={handleCheckForUpdate}
+                    disabled={updateBusy}
+                  >
+                    <View style={styles.labelContainer}>
+                      <Ionicons
+                        name="cloud-download-outline"
+                        size={22}
+                        color={COLORS.textPrimary}
+                      />
+                      <Text style={styles.label}>Güncellemeyi Kontrol Et</Text>
+                    </View>
+                    {updateBusy ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={COLORS.primary}
+                      />
+                    ) : (
+                      <Ionicons
+                        name="chevron-forward"
+                        size={20}
+                        color={COLORS.textSecondary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
               {/* How to Play */}
               <View style={[styles.settingBlock, { marginBottom: 0 }]}>

@@ -1,8 +1,14 @@
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
-import React, { useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { StyleSheet, View } from "react-native";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
+import { StyleSheet } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   cancelAnimation,
@@ -10,6 +16,7 @@ import Animated, {
   Extrapolation,
   interpolate,
   runOnJS,
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -40,6 +47,8 @@ interface OnboardingPieceProps {
   hasNeighborLeft?: boolean;
   hasNeighborRight?: boolean;
   onDrop: (id: number, dropRow: number, dropCol: number) => void;
+  /** 0–1 tamamlanma kutlaması — çerçeve soldurur */
+  celebrateSV?: SharedValue<number>;
 }
 
 const BORDER_WIDTH = 2;
@@ -57,7 +66,12 @@ const triggerHaptic = (success: boolean) => {
   } catch {}
 };
 
-const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
+/** JS thread'de state güncellemesini jest tamamlandıktan sonraya kaydırır */
+const deferDrop = (fn: () => void) => {
+  queueMicrotask(fn);
+};
+
+const OnboardingPieceInner: React.FC<OnboardingPieceProps> = ({
   pieceId,
   imageRow,
   imageCol,
@@ -76,6 +90,7 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
   hasNeighborLeft = false,
   hasNeighborRight = false,
   onDrop,
+  celebrateSV,
 }) => {
   const targetX = currentCol * pieceSize;
   const targetY = currentRow * pieceSize;
@@ -88,12 +103,45 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
   const hintProgress = useSharedValue(0);
   const isDragging = useSharedValue(0);
 
+  const targetXSV = useSharedValue(targetX);
+  const targetYSV = useSharedValue(targetY);
+  const isActiveSV = useSharedValue(isActive ? 1 : 0);
+  const isPlacedSV = useSharedValue(isPlaced ? 1 : 0);
+
+  const svPieceSize = useSharedValue(pieceSize);
+  const svCurrentCol = useSharedValue(currentCol);
+  const svCurrentRow = useSharedValue(currentRow);
+  const svCorrectCol = useSharedValue(correctCol);
+  const svCorrectRow = useSharedValue(correctRow);
+
   const prevTarget = useRef({ x: targetX, y: targetY });
 
-  // Smooth layout transitions when currentRow/Col changes (mirrors JigsawPiece)
+  useEffect(() => {
+    isActiveSV.value = isActive ? 1 : 0;
+    isPlacedSV.value = isPlaced ? 1 : 0;
+    svPieceSize.value = pieceSize;
+    svCurrentCol.value = currentCol;
+    svCurrentRow.value = currentRow;
+    svCorrectCol.value = correctCol;
+    svCorrectRow.value = correctRow;
+  }, [
+    isActive,
+    isPlaced,
+    pieceSize,
+    currentCol,
+    currentRow,
+    correctCol,
+    correctRow,
+  ]);
+
   useLayoutEffect(() => {
-    const diffX = targetX - prevTarget.current.x;
-    const diffY = targetY - prevTarget.current.y;
+    const newX = currentCol * pieceSize;
+    const newY = currentRow * pieceSize;
+    const diffX = newX - prevTarget.current.x;
+    const diffY = newY - prevTarget.current.y;
+
+    targetXSV.value = newX;
+    targetYSV.value = newY;
 
     if (Math.abs(diffX) > 0.1 || Math.abs(diffY) > 0.1) {
       visualOffsetX.value = visualOffsetX.value - diffX;
@@ -102,10 +150,9 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
       visualOffsetY.value = withTiming(0, { duration: 280 });
     }
 
-    prevTarget.current = { x: targetX, y: targetY };
-  }, [targetX, targetY]);
+    prevTarget.current = { x: newX, y: newY };
+  }, [currentCol, currentRow, pieceSize]);
 
-  // Active piece pulse
   useEffect(() => {
     if (isActive && !isPlaced) {
       scalePulse.value = withRepeat(
@@ -122,7 +169,6 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
     }
   }, [isActive, isPlaced]);
 
-  // Hint finger animation - loops from current slot center to correct slot center
   useEffect(() => {
     if (isActive && !isPlaced) {
       hintProgress.value = 0;
@@ -147,6 +193,13 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
       hintProgress.value = withTiming(0, { duration: 150 });
     }
   }, [isActive, isPlaced]);
+
+  const runDeferredDrop = useCallback(
+    (id: number, dropRow: number, dropCol: number) => {
+      deferDrop(() => onDrop(id, dropRow, dropCol));
+    },
+    [onDrop],
+  );
 
   const gesture = useMemo(
     () =>
@@ -178,7 +231,6 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
 
           const moved = dropRow !== currentRow || dropCol !== currentCol;
 
-          // Snap drag back; final position now controlled by props (currentRow/Col)
           dragX.value = withTiming(0, { duration: 220 });
           dragY.value = withTiming(0, { duration: 220 });
 
@@ -186,7 +238,7 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
             const willBePlaced =
               dropRow === correctRow && dropCol === correctCol;
             runOnJS(triggerHaptic)(willBePlaced);
-            runOnJS(onDrop)(pieceId, dropRow, dropCol);
+            runOnJS(runDeferredDrop)(pieceId, dropRow, dropCol);
           }
         }),
     [
@@ -200,42 +252,79 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
       correctCol,
       gridRows,
       gridCols,
-      onDrop,
+      runDeferredDrop,
     ],
   );
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: targetX + visualOffsetX.value + dragX.value },
-      { translateY: targetY + visualOffsetY.value + dragY.value },
+      {
+        translateX: targetXSV.value + visualOffsetX.value + dragX.value,
+      },
+      {
+        translateY: targetYSV.value + visualOffsetY.value + dragY.value,
+      },
       { scale: scalePulse.value },
     ],
-    zIndex: isDragging.value === 1 ? 9999 : isActive ? 20 : isPlaced ? 5 : 10,
   }));
+
+  const pieceFrameStyle = useMemo(
+    () => ({
+      position: "absolute" as const,
+      overflow: "hidden" as const,
+      borderRadius: 4,
+      width: pieceSize,
+      height: pieceSize,
+      zIndex: isActive ? 500 : isPlaced ? 5 : 10 + pieceId,
+    }),
+    [pieceSize, isActive, isPlaced, pieceId],
+  );
 
   const isHighlighted = isActive && !isPlaced;
   const sideWidth = isHighlighted ? ACTIVE_BORDER_WIDTH : BORDER_WIDTH;
-  const borderOverlayStyle = {
-    ...StyleSheet.absoluteFillObject,
-    borderColor: isHighlighted ? COLORS.primary : "#ffffff",
-    borderTopWidth: hasNeighborTop ? 0 : sideWidth,
-    borderBottomWidth: hasNeighborBottom ? 0 : sideWidth,
-    borderLeftWidth: hasNeighborLeft ? 0 : sideWidth,
-    borderRightWidth: hasNeighborRight ? 0 : sideWidth,
-  };
+  const borderOverlayStyle = useMemo(
+    () => ({
+      ...StyleSheet.absoluteFillObject,
+      borderColor: isHighlighted ? COLORS.primary : "#ffffff",
+      borderTopWidth: hasNeighborTop ? 0 : sideWidth,
+      borderBottomWidth: hasNeighborBottom ? 0 : sideWidth,
+      borderLeftWidth: hasNeighborLeft ? 0 : sideWidth,
+      borderRightWidth: hasNeighborRight ? 0 : sideWidth,
+    }),
+    [
+      isHighlighted,
+      sideWidth,
+      hasNeighborTop,
+      hasNeighborBottom,
+      hasNeighborLeft,
+      hasNeighborRight,
+    ],
+  );
 
-  // Hint finger: loops from current slot center to correct slot center
+  const imageStyle = useMemo(
+    () => ({
+      width: gridCols * pieceSize,
+      height: gridRows * pieceSize,
+      transform: [
+        { translateX: -imageCol * pieceSize },
+        { translateY: -imageRow * pieceSize },
+      ],
+    }),
+    [gridCols, gridRows, pieceSize, imageCol, imageRow],
+  );
+
   const hintStyle = useAnimatedStyle(() => {
-    if (!isActive || isPlaced) {
+    if (!isActiveSV.value || isPlacedSV.value) {
       return { opacity: 0, transform: [{ translateX: 0 }, { translateY: 0 }] };
     }
 
     const dragSuppression = isDragging.value === 1 ? 0 : 1;
+    const ps = svPieceSize.value;
 
-    const fromX = currentCol * pieceSize + pieceSize / 2;
-    const fromY = currentRow * pieceSize + pieceSize / 2;
-    const toX = correctCol * pieceSize + pieceSize / 2;
-    const toY = correctRow * pieceSize + pieceSize / 2;
+    const fromX = svCurrentCol.value * ps + ps / 2;
+    const fromY = svCurrentRow.value * ps + ps / 2;
+    const toX = svCorrectCol.value * ps + ps / 2;
+    const toY = svCorrectRow.value * ps + ps / 2;
 
     const x = interpolate(
       hintProgress.value,
@@ -263,30 +352,34 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
     };
   });
 
+  const celebrateBorderStyle = useAnimatedStyle(() => {
+    if (!celebrateSV) {
+      return { opacity: 1 };
+    }
+    return {
+      opacity: interpolate(
+        celebrateSV.value,
+        [0, 1],
+        [1, 0],
+        Extrapolation.CLAMP,
+      ),
+    };
+  });
+
   return (
     <>
       <GestureDetector gesture={gesture}>
-        <Animated.View
-          style={[
-            styles.piece,
-            { width: pieceSize, height: pieceSize },
-            animatedStyle,
-          ]}
-        >
+        <Animated.View style={[pieceFrameStyle, animatedStyle]}>
           <Image
             source={imageSource}
-            style={{
-              width: gridCols * pieceSize,
-              height: gridRows * pieceSize,
-              transform: [
-                { translateX: -imageCol * pieceSize },
-                { translateY: -imageRow * pieceSize },
-              ],
-            }}
+            style={imageStyle}
             contentFit="cover"
             cachePolicy="memory-disk"
           />
-          <View pointerEvents="none" style={borderOverlayStyle} />
+          <Animated.View
+            pointerEvents="none"
+            style={[borderOverlayStyle, celebrateBorderStyle]}
+          />
         </Animated.View>
       </GestureDetector>
 
@@ -302,12 +395,36 @@ const OnboardingPiece: React.FC<OnboardingPieceProps> = ({
   );
 };
 
+function propsEqual(
+  prev: OnboardingPieceProps,
+  next: OnboardingPieceProps,
+): boolean {
+  return (
+    prev.pieceId === next.pieceId &&
+    prev.imageRow === next.imageRow &&
+    prev.imageCol === next.imageCol &&
+    prev.correctRow === next.correctRow &&
+    prev.correctCol === next.correctCol &&
+    prev.currentRow === next.currentRow &&
+    prev.currentCol === next.currentCol &&
+    prev.pieceSize === next.pieceSize &&
+    prev.gridRows === next.gridRows &&
+    prev.gridCols === next.gridCols &&
+    prev.imageSource === next.imageSource &&
+    prev.isActive === next.isActive &&
+    prev.isPlaced === next.isPlaced &&
+    prev.hasNeighborTop === next.hasNeighborTop &&
+    prev.hasNeighborBottom === next.hasNeighborBottom &&
+    prev.hasNeighborLeft === next.hasNeighborLeft &&
+    prev.hasNeighborRight === next.hasNeighborRight &&
+    prev.onDrop === next.onDrop &&
+    prev.celebrateSV === next.celebrateSV
+  );
+}
+
+const OnboardingPiece = React.memo(OnboardingPieceInner, propsEqual);
+
 const styles = StyleSheet.create({
-  piece: {
-    position: "absolute",
-    overflow: "hidden",
-    borderRadius: 4,
-  },
   hintHand: {
     position: "absolute",
     width: 28,

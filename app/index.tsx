@@ -27,7 +27,7 @@ import {
     useWindowDimensions,
 } from "react-native";
 import Animated, {FadeInUp, ZoomIn} from "react-native-reanimated";
-import {SafeAreaProvider, SafeAreaView, useSafeAreaInsets} from "react-native-safe-area-context";
+import {SafeAreaProvider, useSafeAreaInsets} from "react-native-safe-area-context";
 import {useHasSeenOnboarding, useOnboardingHydrated} from "@/src/store/onboardingStore";
 
 export default function StartScreen() {
@@ -90,8 +90,6 @@ export default function StartScreen() {
         initGame();
     }, []);
 
-    const totalChapterCount = chapters.length || 0;
-
     const buttonWidth = getResponsiveValue(width, {
         phone: "85%",
         tablet: 320 as any,
@@ -110,12 +108,8 @@ export default function StartScreen() {
 
             const chapterId = target.chapterId || 1;
             const levelId = target.levelId || 1;
-
-            console.log("📍 Navigating to:", chapterId, levelId);
-
             router.push(`/game/jigsaw/${chapterId}/${levelId}`);
         } catch (error) {
-            console.error("Navigation error:", error);
             router.push("/game/jigsaw/1/1");
         }
     };

@@ -58,6 +58,10 @@ export const loadInterstitial = () => {
             console.log("📺 Interstitial error:", error);
             isInterstitialLoaded = false;
             useAdStore.getState().actions.setInterstitialReady(false);
+            // Gösterim sırasında hata olursa tekrar load döngüsünü tetikleme (showInterstitial temizliyor).
+            if (!useAdStore.getState().isAdShowing) {
+                setTimeout(() => loadInterstitial(), 5000);
+            }
         });
 
         interstitialAd.load();
@@ -69,33 +73,55 @@ export const loadInterstitial = () => {
 export const showInterstitial = async (): Promise<boolean> => {
     return new Promise((resolve) => {
         try {
-            // Listen for ad close event BEFORE showing
-            const closeListener = interstitialAd.addAdEventListener(
+            if (!interstitialAd || !isInterstitialLoaded) {
+                console.log("📺 Interstitial show skipped: not loaded");
+                resolve(false);
+                return;
+            }
+
+            let markedCooldown = false;
+            const unsubOpened = interstitialAd.addAdEventListener(
+                AdEventType.OPENED,
+                () => {
+                    unsubOpened();
+                    if (!markedCooldown) {
+                        markedCooldown = true;
+                        useAdStore.getState().actions.markInterstitialShown();
+                    }
+                },
+            );
+
+            let unsubClose: () => void = () => {};
+            let unsubError: () => void = () => {};
+
+            unsubClose = interstitialAd.addAdEventListener(
                 AdEventType.CLOSED,
                 () => {
                     console.log("📺 Interstitial closed by user");
-                    useAdStore.getState().actions.setAdShowing(false); // Enable other ads
-                    closeListener(); // Remove listener
-                    resolve(true); // Ad was watched
+                    unsubClose();
+                    unsubError();
+                    useAdStore.getState().actions.setAdShowing(false);
+                    resolve(markedCooldown);
                 },
             );
 
-            // Also handle errors
-            const errorListener = interstitialAd.addAdEventListener(
+            unsubError = interstitialAd.addAdEventListener(
                 AdEventType.ERROR,
                 () => {
                     console.log("📺 Interstitial error during show");
-                    errorListener();
-                    resolve(false);
+                    unsubClose();
+                    unsubError();
+                    unsubOpened();
+                    useAdStore.getState().actions.setAdShowing(false);
+                    resolve(markedCooldown);
                 },
             );
 
+            useAdStore.getState().actions.setAdShowing(true);
             interstitialAd.show();
-            useAdStore.getState().actions.setAdShowing(true); // Disable other ads
-            useAdStore.getState().actions.markInterstitialShown();
         } catch (error) {
             console.log("📺 Interstitial show error:", error);
-            useAdStore.getState().actions.setAdShowing(false); // Reset on error
+            useAdStore.getState().actions.setAdShowing(false);
             resolve(false);
         }
     });
@@ -185,28 +211,24 @@ export const showRewarded = (): Promise<boolean> => {
 // INITIALIZATION
 // ==========================================
 
-// PERFORMANCE: Deferred initialization to prevent blocking splash/animations
-export const initializeAds = () => {
+// Önce request configuration, sonra resmi SDK initialize(); ancak o zaman load çağrılır (invertase dokümantasyonu).
+export async function initializeAds(): Promise<void> {
+    await new Promise<void>((r) => setTimeout(r, 400));
 
-    // Defer ad loading to prevent JS bridge contention during startup
-    // This allows splash screen and initial animations to complete smoothly
-    setTimeout(() => {
-        console.log("📺 Initializing ads (deferred)...");
-
-        mobileAds()
-            .setRequestConfiguration({
-                // Child-directed setting
-                tagForChildDirectedTreatment: true,
-                // Under-age of consent setting
-                tagForUnderAgeOfConsent: true,
-                // Content rating: General audiences (G)
-                maxAdContentRating: MaxAdContentRating.G,
-            })
-            .then(() => {
-                console.log("📺 AdMob configuration set for Families Policy");
-            });
+    try {
+        console.log("📺 Initializing Google Mobile Ads SDK...");
+        await mobileAds().setRequestConfiguration({
+            tagForChildDirectedTreatment: false,
+            tagForUnderAgeOfConsent: false,
+            maxAdContentRating: MaxAdContentRating.G,
+            testDeviceIdentifiers: __DEV__ ? ['EMULATOR'] : [],
+        });
+        await mobileAds().initialize();
+        console.log("📺 Google Mobile Ads SDK initialized");
 
         loadInterstitial();
         loadRewarded();
-    }, 1500); // 1.5s delay after app is interactive
-};
+    } catch (error) {
+        console.log("📺 Ad initialization error:", error);
+    }
+}

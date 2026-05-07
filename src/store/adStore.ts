@@ -14,8 +14,8 @@ export const AD_RULES = {
       { chapterId: 1, levelId: 3 },
       { chapterId: 1, levelId: 4 },
     ],
-    minTimeBetweenAds: 300000, // 5 minutes between interstitial ads
-    showOnLevelEntry: true, // Show when entering a level (not on completion)
+    minTimeBetweenAds: __DEV__ ? 30000 : 300000, // Dev: 30sn, Prod: 5dk aktif süre eşiği (ms)
+    showOnLevelEntry: false, // Dokümantasyon: kod şu an reklamı level tamamlanıp sonrakine geçerken gösteriyor
   },
 
   // Rewarded rules
@@ -41,9 +41,11 @@ export const AD_RULES = {
 // ==========================================
 
 interface AdState {
-  // Last shown timestamps
   lastInterstitialShown: number;
   lastRewardedShown: number;
+
+  /** Jigsaw ekranında aktifken biriken süre (AsyncStorage ile kalıcı) */
+  interstitialPlaytimeAccumMs: number;
 
   // Ad readiness
   isInterstitialReady: boolean;
@@ -60,10 +62,12 @@ interface AdState {
 }
 
 interface AdActions {
-  // Interstitial
+  interstitialEligibleByRules: (chapterId: number, levelId: number) => boolean;
   canShowInterstitial: (chapterId: number, levelId: number) => boolean;
   markInterstitialShown: () => void;
   setInterstitialReady: (ready: boolean) => void;
+  addInterstitialPlaytimeMs: (deltaMs: number) => void;
+  resetInterstitialPlaytime: () => void;
 
   // Rewarded
   canShowRewarded: () => boolean;
@@ -102,6 +106,7 @@ const AD_STATE_KEY = "@puzzle_game_ad_state";
 const initialState: AdState = {
   lastInterstitialShown: 0,
   lastRewardedShown: 0,
+  interstitialPlaytimeAccumMs: 0,
   isInterstitialReady: false,
   isRewardedReady: false,
   isBannerReady: false,
@@ -123,10 +128,9 @@ export const useAdStore = create<AdStore>((set, get) => ({
     // INTERSTITIAL ADS
     // ==========================================
 
-    canShowInterstitial: (chapterId: number, levelId: number) => {
+    interstitialEligibleByRules: (chapterId: number, levelId: number) => {
       const state = get();
 
-      // Check if this level is excluded
       const isExcluded = AD_RULES.interstitial.excludedLevels.some(
         (excluded) =>
           excluded.chapterId === chapterId && excluded.levelId === levelId,
@@ -137,18 +141,27 @@ export const useAdStore = create<AdStore>((set, get) => ({
         return false;
       }
 
-      // Check if enough time has passed
-      const now = Date.now();
-      const timeSinceLastAd = now - state.lastInterstitialShown;
-      if (timeSinceLastAd < AD_RULES.interstitial.minTimeBetweenAds) {
+      const playMs = state.interstitialPlaytimeAccumMs;
+      if (playMs < AD_RULES.interstitial.minTimeBetweenAds) {
         const remainingSeconds = Math.ceil(
-          (AD_RULES.interstitial.minTimeBetweenAds - timeSinceLastAd) / 1000,
+          (AD_RULES.interstitial.minTimeBetweenAds - playMs) / 1000,
         );
-        console.log(`📺 Too soon for ad, wait ${remainingSeconds}s`);
+        console.log(
+          `📺 Interstitial playtime not reached, ~${remainingSeconds}s active play left`,
+        );
         return false;
       }
 
-      // Check if ad is ready
+      return true;
+    },
+
+    canShowInterstitial: (chapterId: number, levelId: number) => {
+      const state = get();
+
+      if (!get().actions.interstitialEligibleByRules(chapterId, levelId)) {
+        return false;
+      }
+
       if (!state.isInterstitialReady) {
         console.log("📺 Interstitial not ready");
         return false;
@@ -162,8 +175,23 @@ export const useAdStore = create<AdStore>((set, get) => ({
       set((state) => ({
         lastInterstitialShown: now,
         totalInterstitialsShown: state.totalInterstitialsShown + 1,
-        isInterstitialReady: false, // Will be reloaded
+        isInterstitialReady: false,
+        interstitialPlaytimeAccumMs: 0,
       }));
+      get().actions.saveAdState();
+    },
+
+    addInterstitialPlaytimeMs: (deltaMs: number) => {
+      if (deltaMs <= 0) return;
+      set((state) => ({
+        interstitialPlaytimeAccumMs:
+          state.interstitialPlaytimeAccumMs + deltaMs,
+      }));
+      get().actions.saveAdState();
+    },
+
+    resetInterstitialPlaytime: () => {
+      set({ interstitialPlaytimeAccumMs: 0 });
       get().actions.saveAdState();
     },
 
@@ -243,8 +271,11 @@ export const useAdStore = create<AdStore>((set, get) => ({
           set({
             lastInterstitialShown: parsed.lastInterstitialShown || 0,
             lastRewardedShown: parsed.lastRewardedShown || 0,
+            interstitialPlaytimeAccumMs:
+              parsed.interstitialPlaytimeAccumMs ?? 0,
             totalInterstitialsShown: parsed.totalInterstitialsShown || 0,
-            totalRewardedShown: parsed.totalRewardedsShown || 0,
+            totalRewardedShown:
+              parsed.totalRewardedShown ?? parsed.totalRewardedsShown ?? 0,
             totalBannersShown: parsed.totalBannersShown || 0,
           });
           console.log("📺 Ad state loaded from storage");
@@ -260,6 +291,7 @@ export const useAdStore = create<AdStore>((set, get) => ({
         const toSave = {
           lastInterstitialShown: state.lastInterstitialShown,
           lastRewardedShown: state.lastRewardedShown,
+          interstitialPlaytimeAccumMs: state.interstitialPlaytimeAccumMs,
           totalInterstitialsShown: state.totalInterstitialsShown,
           totalRewardedShown: state.totalRewardedShown,
           totalBannersShown: state.totalBannersShown,
