@@ -176,13 +176,6 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: "center", // Centered content
   },
-  star: {
-    fontSize: 44,
-    color: COLORS.starEmpty,
-  },
-  starFilled: {
-    color: COLORS.starFilled,
-  },
   statsContainer: {
     alignItems: "center",
     marginBottom: 32,

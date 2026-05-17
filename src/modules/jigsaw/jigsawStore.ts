@@ -24,8 +24,12 @@ export interface JigsawState {
   levelKey: number; // Increments on each new level to trigger flip animation
 }
 
+const DEV_SOLVED_GROUP = "__dev-solved__";
+
 interface JigsawActions {
   initializeLevel: (gridSize: GridSize) => void;
+  /** Sadece __DEV__: tüm parçaları doğru konuma alır ve kazanılmış sayar. */
+  devSolveLevel: () => void;
   moveGroupToGrid: (
     anchorId: number,
     targetRow: number,
@@ -258,6 +262,31 @@ export const useJigsawStore = create<JigsawStore>((set, get) => ({
         maxZIndex: 1,
         status: "playing",
         levelKey: get().levelKey + 1, // Increment to trigger flip animation
+      });
+    },
+
+    devSolveLevel: () => {
+      if (!__DEV__) return;
+      set((state) => {
+        if (!state.isInitialized || state.status === "won") return {};
+        const newMaxZIndex = state.maxZIndex + 1;
+        const pieces = { ...state.pieces };
+        for (const idStr of Object.keys(pieces)) {
+          const id = Number(idStr);
+          const p = pieces[id];
+          pieces[id] = {
+            ...p,
+            currentRow: p.correctRow,
+            currentCol: p.correctCol,
+            groupId: DEV_SOLVED_GROUP,
+            zIndex: newMaxZIndex,
+          };
+        }
+        return {
+          pieces,
+          maxZIndex: newMaxZIndex,
+          status: "won",
+        };
       });
     },
 

@@ -1,4 +1,4 @@
-import { GridSize } from "../types";
+import {GridSize} from "../types";
 
 // LEVELS_PER_CHAPTER and TOTAL_CHAPTERS removed for dynamic calculation
 // levels are governed by the server/data source now.
@@ -71,8 +71,7 @@ export const TILE_GAP = 2;
 export const TILE_BORDER_RADIUS = 6;
 
 export const getBoardSize = (screenWidth: number): number => {
-  const maxBoardSize = screenWidth - BOARD_PADDING * 2;
-  return maxBoardSize;
+  return screenWidth - BOARD_PADDING * 2;
 };
 
 export const getGridColumns = (screenWidth: number): number => {
@@ -94,7 +93,7 @@ export const HINT_CONFIG = {
 // ==========================================
 
 // Test Ad IDs (for development)
-const TEST_AD_CONFIG = {
+/*const TEST_AD_CONFIG = {
   interstitial: {
     android: "ca-app-pub-3940256099942544/1033173712",
     ios: "ca-app-pub-3940256099942544/4411468910",
@@ -111,7 +110,7 @@ const TEST_AD_CONFIG = {
     android: "ca-app-pub-3940256099942544/2247696110",
     ios: "ca-app-pub-3940256099942544/3986624511",
   },
-};
+};*/
 
 // Production Ad IDs (for release builds)
 const PROD_AD_CONFIG = {
@@ -134,7 +133,7 @@ const PROD_AD_CONFIG = {
 };
 
 // Automatically switch between test and production IDs
-export const AD_CONFIG = __DEV__ ? TEST_AD_CONFIG : PROD_AD_CONFIG;
+export const AD_CONFIG = PROD_AD_CONFIG;
 
 // ==========================================
 // STORAGE KEYS

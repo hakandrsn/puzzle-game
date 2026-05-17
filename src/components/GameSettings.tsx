@@ -1,7 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import React, { useState } from "react";
 import { StyleSheet, TouchableOpacity } from "react-native";
-import { COLORS } from "../constants/gameConfig";
+import { COLORS } from "@/src/constants/colors";
 import { useClickSound } from "../hooks/useClickSound";
 import GameSettingsMenu from "./GameSettingsMenu";
 

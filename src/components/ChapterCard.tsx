@@ -1,8 +1,11 @@
+import { LockIcon, StarCountInline } from "@/src/components/StarCount";
 import { COLORS } from "@/src/constants/gameConfig";
+import { useLockedCardShake } from "@/src/hooks/useLockedCardShake";
 import { Chapter } from "@/src/types";
 import { Image } from "expo-image";
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
 
 interface ChapterCardProps {
   chapter: Chapter;
@@ -16,15 +19,27 @@ interface ChapterCardProps {
 const ChapterCard = React.memo<ChapterCardProps>(
   ({ chapter, index, isUnlocked, progress, cardWidth, onPress }) => {
     const progressPercent = (progress.completed / progress.total) * 100;
+    const { shake, shakeStyle } = useLockedCardShake();
+
+    const handlePress = () => {
+      if (!isUnlocked) {
+        shake();
+        return;
+      }
+      onPress();
+    };
 
     return (
       <View style={{ width: cardWidth }}>
-        <TouchableOpacity
-          style={[styles.card, !isUnlocked && styles.cardLocked]}
-          onPress={onPress}
-          disabled={!isUnlocked}
-          activeOpacity={0.7}
+        <Pressable
+          style={({ pressed }) => ({
+            opacity: isUnlocked && pressed ? 0.92 : 1,
+          })}
+          onPress={handlePress}
         >
+          <Animated.View
+            style={[styles.card, !isUnlocked && styles.cardLocked, shakeStyle]}
+          >
           {/* Thumbnail Section */}
           <View style={styles.thumbnailArea}>
             <Image
@@ -40,7 +55,7 @@ const ChapterCard = React.memo<ChapterCardProps>(
             </View>
             {!isUnlocked && (
               <View style={styles.lockedArea}>
-                <Text style={styles.lockIc}>🔒</Text>
+                <LockIcon size={50} />
               </View>
             )}
           </View>
@@ -61,11 +76,16 @@ const ChapterCard = React.memo<ChapterCardProps>(
               </Text>
             </View>
             <View style={styles.starInfo}>
-              <Text style={styles.starIc}>★</Text>
-              <Text style={styles.starVal}>{progress.stars}</Text>
+              <StarCountInline
+                count={progress.stars}
+                iconSize={14}
+                gap={5}
+                textStyle={styles.starVal}
+              />
             </View>
           </View>
-        </TouchableOpacity>
+          </Animated.View>
+        </Pressable>
       </View>
     );
   },
@@ -109,11 +129,10 @@ const styles = StyleSheet.create({
   idBadgeTxt: { color: COLORS.textPrimary, fontWeight: "900", fontSize: 13 },
   lockedArea: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.7)",
     justifyContent: "center",
     alignItems: "center",
   },
-  lockIc: { fontSize: 32 },
   infoArea: { padding: 15, gap: 10 },
   name: { fontSize: 18, fontWeight: "800", color: COLORS.textPrimary },
   progressRow: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -131,7 +150,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   starInfo: { flexDirection: "row", alignItems: "center", gap: 5 },
-  starIc: { fontSize: 14, color: COLORS.starFilled },
   starVal: { fontSize: 14, color: COLORS.textPrimary, fontWeight: "700" },
 });
 

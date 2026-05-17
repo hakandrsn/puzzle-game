@@ -1,6 +1,6 @@
 import { COLORS } from "@/src/constants/gameConfig";
 import { ImageSource } from "@/src/types";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
