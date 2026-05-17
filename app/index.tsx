@@ -58,7 +58,7 @@ export default function StartScreen() {
     useEffect(() => {
         if (!isReady || !onboardingHydrated) return;
         if (!hasSeenOnboarding) {
-            router.push("//onboarding");
+            router.replace("/onboarding");
         }
     }, [isReady, onboardingHydrated, hasSeenOnboarding, router]);
 

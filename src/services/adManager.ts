@@ -1,14 +1,14 @@
-import {Platform} from "react-native";
-import mobileAds ,{
-    MaxAdContentRating,
-    InterstitialAd,
-    RewardedAd,
+import { Platform } from "react-native";
+import mobileAds, {
     AdEventType,
+    InterstitialAd,
+    MaxAdContentRating,
+    RewardedAd,
     RewardedAdEventType,
     TestIds
 } from "react-native-google-mobile-ads";
-import {AD_CONFIG} from "../constants/gameConfig";
-import {useAdStore} from "../store/adStore";
+import { AD_CONFIG } from "../constants/gameConfig";
+import { useAdStore } from "../store/adStore";
 
 const getInterstitialId = () => {
     if (__DEV__ && TestIds) return TestIds.INTERSTITIAL;
@@ -32,46 +32,133 @@ let interstitialAd: any = null;
 let rewardedAd: any = null;
 let isInterstitialLoaded = false;
 let isRewardedLoaded = false;
+let isInterstitialLoading = false;
+let isRewardedLoading = false;
+let interstitialLoadGeneration = 0;
+let rewardedLoadGeneration = 0;
+let interstitialRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let rewardedRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let interstitialLoadUnsubs: Array<() => void> = [];
+let rewardedLoadUnsubs: Array<() => void> = [];
+
+const cleanupInterstitialLoadListeners = () => {
+    interstitialLoadUnsubs.forEach((unsubscribe) => unsubscribe());
+    interstitialLoadUnsubs = [];
+};
+
+const cleanupRewardedLoadListeners = () => {
+    rewardedLoadUnsubs.forEach((unsubscribe) => unsubscribe());
+    rewardedLoadUnsubs = [];
+};
+
+const clearInterstitialRetry = () => {
+    if (interstitialRetryTimer) {
+        clearTimeout(interstitialRetryTimer);
+        interstitialRetryTimer = null;
+    }
+};
+
+const clearRewardedRetry = () => {
+    if (rewardedRetryTimer) {
+        clearTimeout(rewardedRetryTimer);
+        rewardedRetryTimer = null;
+    }
+};
+
+const scheduleInterstitialLoad = (delayMs = 0) => {
+    clearInterstitialRetry();
+    interstitialRetryTimer = setTimeout(() => {
+        interstitialRetryTimer = null;
+        loadInterstitial();
+    }, delayMs);
+};
+
+const scheduleRewardedLoad = (delayMs = 0) => {
+    clearRewardedRetry();
+    rewardedRetryTimer = setTimeout(() => {
+        rewardedRetryTimer = null;
+        loadRewarded();
+    }, delayMs);
+};
 
 // ==========================================
 // INTERSTITIAL ADS
 // ==========================================
 
 export const loadInterstitial = () => {
+    if (isInterstitialLoaded || isInterstitialLoading) return;
+
+    const generation = interstitialLoadGeneration + 1;
+    interstitialLoadGeneration = generation;
+    isInterstitialLoading = true;
+    isInterstitialLoaded = false;
+    clearInterstitialRetry();
+    cleanupInterstitialLoadListeners();
+    useAdStore.getState().actions.setInterstitialReady(false);
 
     try {
-        interstitialAd = InterstitialAd.createForAdRequest(getInterstitialId());
+        const ad = InterstitialAd.createForAdRequest(getInterstitialId());
+        interstitialAd = ad;
 
-        interstitialAd.addAdEventListener(AdEventType.LOADED, () => {
+        const isCurrent = () =>
+            generation === interstitialLoadGeneration && interstitialAd === ad;
+
+        interstitialLoadUnsubs.push(ad.addAdEventListener(AdEventType.LOADED, () => {
+            if (!isCurrent()) return;
+            isInterstitialLoading = false;
             isInterstitialLoaded = true;
             useAdStore.getState().actions.setInterstitialReady(true);
             console.log("📺 Interstitial loaded");
-        });
+        }));
 
-        interstitialAd.addAdEventListener(AdEventType.CLOSED, () => {
+        interstitialLoadUnsubs.push(ad.addAdEventListener(AdEventType.CLOSED, () => {
+            if (!isCurrent()) return;
+            isInterstitialLoading = false;
             isInterstitialLoaded = false;
             useAdStore.getState().actions.setInterstitialReady(false);
-            loadInterstitial(); // Preload next
-        });
+            scheduleInterstitialLoad();
+        }));
 
-        interstitialAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
+        interstitialLoadUnsubs.push(ad.addAdEventListener(AdEventType.ERROR, (error: any) => {
+            if (!isCurrent()) return;
             console.log("📺 Interstitial error:", error);
+            isInterstitialLoading = false;
             isInterstitialLoaded = false;
             useAdStore.getState().actions.setInterstitialReady(false);
-            // Gösterim sırasında hata olursa tekrar load döngüsünü tetikleme (showInterstitial temizliyor).
             if (!useAdStore.getState().isAdShowing) {
-                setTimeout(() => loadInterstitial(), 5000);
+                scheduleInterstitialLoad(5000);
             }
-        });
+        }));
 
-        interstitialAd.load();
+        ad.load();
     } catch (error) {
         console.log("📺 Interstitial init error:", error);
+        isInterstitialLoading = false;
+        isInterstitialLoaded = false;
+        useAdStore.getState().actions.setInterstitialReady(false);
+        scheduleInterstitialLoad(5000);
     }
 };
 
 export const showInterstitial = async (): Promise<boolean> => {
     return new Promise((resolve) => {
+        let resolved = false;
+        let unsubOpened: () => void = () => {};
+        let unsubClose: () => void = () => {};
+        let unsubError: () => void = () => {};
+        const cleanupShowListeners = () => {
+            unsubOpened();
+            unsubClose();
+            unsubError();
+        };
+        const finish = (shown: boolean) => {
+            if (resolved) return;
+            resolved = true;
+            cleanupShowListeners();
+            useAdStore.getState().actions.setAdShowing(false);
+            resolve(shown);
+        };
+
         try {
             if (!interstitialAd || !isInterstitialLoaded) {
                 console.log("📺 Interstitial show skipped: not loaded");
@@ -79,8 +166,9 @@ export const showInterstitial = async (): Promise<boolean> => {
                 return;
             }
 
+            const ad = interstitialAd;
             let markedCooldown = false;
-            const unsubOpened = interstitialAd.addAdEventListener(
+            unsubOpened = ad.addAdEventListener(
                 AdEventType.OPENED,
                 () => {
                     unsubOpened();
@@ -91,38 +179,37 @@ export const showInterstitial = async (): Promise<boolean> => {
                 },
             );
 
-            let unsubClose: () => void = () => {};
-            let unsubError: () => void = () => {};
-
-            unsubClose = interstitialAd.addAdEventListener(
+            unsubClose = ad.addAdEventListener(
                 AdEventType.CLOSED,
                 () => {
                     console.log("📺 Interstitial closed by user");
-                    unsubClose();
-                    unsubError();
-                    useAdStore.getState().actions.setAdShowing(false);
-                    resolve(markedCooldown);
+                    finish(markedCooldown);
                 },
             );
 
-            unsubError = interstitialAd.addAdEventListener(
+            unsubError = ad.addAdEventListener(
                 AdEventType.ERROR,
                 () => {
                     console.log("📺 Interstitial error during show");
-                    unsubClose();
-                    unsubError();
-                    unsubOpened();
-                    useAdStore.getState().actions.setAdShowing(false);
-                    resolve(markedCooldown);
+                    isInterstitialLoaded = false;
+                    isInterstitialLoading = false;
+                    useAdStore.getState().actions.setInterstitialReady(false);
+                    finish(markedCooldown);
+                    scheduleInterstitialLoad(5000);
                 },
             );
 
+            isInterstitialLoaded = false;
+            useAdStore.getState().actions.setInterstitialReady(false);
             useAdStore.getState().actions.setAdShowing(true);
-            interstitialAd.show();
+            ad.show();
         } catch (error) {
             console.log("📺 Interstitial show error:", error);
-            useAdStore.getState().actions.setAdShowing(false);
-            resolve(false);
+            isInterstitialLoaded = false;
+            isInterstitialLoading = false;
+            useAdStore.getState().actions.setInterstitialReady(false);
+            finish(false);
+            scheduleInterstitialLoad(5000);
         }
     });
 };
@@ -132,77 +219,134 @@ export const showInterstitial = async (): Promise<boolean> => {
 // ==========================================
 
 export const loadRewarded = () => {
-    try {
-        rewardedAd = RewardedAd.createForAdRequest(getRewardedId());
+    if (isRewardedLoaded || isRewardedLoading) return;
 
-        rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
+    const generation = rewardedLoadGeneration + 1;
+    rewardedLoadGeneration = generation;
+    isRewardedLoading = true;
+    isRewardedLoaded = false;
+    clearRewardedRetry();
+    cleanupRewardedLoadListeners();
+    useAdStore.getState().actions.setRewardedReady(false);
+
+    try {
+        const ad = RewardedAd.createForAdRequest(getRewardedId());
+        rewardedAd = ad;
+
+        const isCurrent = () =>
+            generation === rewardedLoadGeneration && rewardedAd === ad;
+
+        rewardedLoadUnsubs.push(ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
+            if (!isCurrent()) return;
+            isRewardedLoading = false;
             isRewardedLoaded = true;
             useAdStore.getState().actions.setRewardedReady(true);
             console.log("🎁 Rewarded loaded");
-        });
+        }));
 
-        rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+        rewardedLoadUnsubs.push(ad.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
+            if (!isCurrent()) return;
             console.log("🎁 Reward earned");
-        });
+        }));
 
-        rewardedAd.addAdEventListener(AdEventType.CLOSED, () => {
+        rewardedLoadUnsubs.push(ad.addAdEventListener(AdEventType.CLOSED, () => {
+            if (!isCurrent()) return;
+            isRewardedLoading = false;
             isRewardedLoaded = false;
             useAdStore.getState().actions.setRewardedReady(false);
-            loadRewarded(); // Preload next
-        });
+            scheduleRewardedLoad();
+        }));
 
-        rewardedAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
+        rewardedLoadUnsubs.push(ad.addAdEventListener(AdEventType.ERROR, (error: any) => {
+            if (!isCurrent()) return;
             console.log("🎁 Rewarded error:", error);
+            isRewardedLoading = false;
             isRewardedLoaded = false;
             useAdStore.getState().actions.setRewardedReady(false);
-        });
+            if (!useAdStore.getState().isAdShowing) {
+                scheduleRewardedLoad(5000);
+            }
+        }));
 
-        rewardedAd.load();
+        ad.load();
     } catch (error) {
         console.log("🎁 Rewarded init error:", error);
+        isRewardedLoading = false;
+        isRewardedLoaded = false;
+        useAdStore.getState().actions.setRewardedReady(false);
+        scheduleRewardedLoad(5000);
     }
 };
 
 export const showRewarded = (): Promise<boolean> => {
     return new Promise((resolve) => {
-        const unsubscribeReward = rewardedAd.addAdEventListener(
+        let resolved = false;
+        let earnedReward = false;
+        let unsubscribeReward: () => void = () => {};
+        let unsubscribeClose: () => void = () => {};
+        let unsubscribeError: () => void = () => {};
+        const cleanupShowListeners = () => {
+            unsubscribeReward();
+            unsubscribeClose();
+            unsubscribeError();
+        };
+        const finish = (earned: boolean) => {
+            if (resolved) return;
+            resolved = true;
+            cleanupShowListeners();
+            useAdStore.getState().actions.setAdShowing(false);
+            if (earned) {
+                useAdStore.getState().actions.markRewardedShown();
+            }
+            resolve(earned);
+        };
+
+        try {
+            if (!rewardedAd || !isRewardedLoaded) {
+                console.log("🎁 Rewarded show skipped: not loaded");
+                resolve(false);
+                return;
+            }
+
+            const ad = rewardedAd;
+
+            unsubscribeReward = ad.addAdEventListener(
             RewardedAdEventType.EARNED_REWARD,
             () => {
                 unsubscribeReward();
-                useAdStore.getState().actions.setAdShowing(false);
-                useAdStore.getState().actions.markRewardedShown();
-                resolve(true);
+                earnedReward = true;
             },
-        );
+            );
 
-        const unsubscribeClose = rewardedAd.addAdEventListener(
+            unsubscribeClose = ad.addAdEventListener(
             AdEventType.CLOSED,
             () => {
-                unsubscribeClose();
-                useAdStore.getState().actions.setAdShowing(false);
+                finish(earnedReward);
             },
-        );
+            );
 
-        const unsubscribeError = rewardedAd.addAdEventListener(
+            unsubscribeError = ad.addAdEventListener(
             AdEventType.ERROR,
             () => {
-                unsubscribeError();
-                useAdStore.getState().actions.setAdShowing(false);
-                resolve(false);
+                isRewardedLoaded = false;
+                isRewardedLoading = false;
+                useAdStore.getState().actions.setRewardedReady(false);
+                finish(false);
+                scheduleRewardedLoad(5000);
             },
-        );
+            );
 
-        try {
-            if (rewardedAd) {
-                rewardedAd.show();
-                useAdStore.getState().actions.setAdShowing(true);
-            } else {
-                throw new Error("Rewarded ad instance is null");
-            }
+            isRewardedLoaded = false;
+            useAdStore.getState().actions.setRewardedReady(false);
+            useAdStore.getState().actions.setAdShowing(true);
+            ad.show();
         } catch (error) {
             console.log("🎁 Rewarded show error:", error);
-            useAdStore.getState().actions.setAdShowing(false);
-            resolve(false);
+            isRewardedLoaded = false;
+            isRewardedLoading = false;
+            useAdStore.getState().actions.setRewardedReady(false);
+            finish(false);
+            scheduleRewardedLoad(5000);
         }
     });
 };
@@ -220,7 +364,7 @@ export async function initializeAds(): Promise<void> {
         await mobileAds().setRequestConfiguration({
             tagForChildDirectedTreatment: false,
             tagForUnderAgeOfConsent: false,
-            maxAdContentRating: MaxAdContentRating.G,
+            maxAdContentRating: MaxAdContentRating.MA,
             testDeviceIdentifiers: __DEV__ ? ['EMULATOR'] : [],
         });
         await mobileAds().initialize();

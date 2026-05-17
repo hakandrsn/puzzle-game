@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import LottieView from "lottie-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -18,7 +18,10 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 // Stores & Hooks
 import { calculateStars, COLORS } from "@/src/constants/gameConfig";
@@ -48,6 +51,41 @@ const GAME_LAYOUT = {
   NEXT_AREA_HEIGHT: 85, // reduced by ~30% from 120
   STARS_HEIGHT: 60, // Fixed height for Stars area
   BANNER: 0.15,
+};
+
+const prefetchedImageUris = new Set<string>();
+const prefetchingImageUris = new Map<string, Promise<boolean>>();
+
+const getImageUri = (level?: Level): string | null => {
+  const source = level?.imageSource;
+  if (typeof source === "object" && source && "uri" in source && source.uri) {
+    return source.uri;
+  }
+  return null;
+};
+
+const prefetchLevelImage = (level?: Level): Promise<boolean> => {
+  const uri = getImageUri(level);
+  if (!uri || prefetchedImageUris.has(uri)) return Promise.resolve(true);
+
+  const inFlight = prefetchingImageUris.get(uri);
+  if (inFlight) return inFlight;
+
+  const promise = Image.prefetch(uri)
+    .then((success) => {
+      if (success) prefetchedImageUris.add(uri);
+      return success;
+    })
+    .catch((error) => {
+      console.warn("Prefetch failed", error);
+      return false;
+    })
+    .finally(() => {
+      prefetchingImageUris.delete(uri);
+    });
+
+  prefetchingImageUris.set(uri, promise);
+  return promise;
 };
 
 export default function JigsawGameScreen() {
@@ -87,6 +125,15 @@ export default function JigsawGameScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
   const [showContinue, setShowContinue] = useState(false);
+  const [isAdvancing, setIsAdvancing] = useState(false);
+  const [transitionOverlayVisible, setTransitionOverlayVisible] =
+    useState(false);
+  const [boardRevealKey, setBoardRevealKey] = useState(0);
+  const isAdvancingRef = useRef(false);
+  const winTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const levelTransitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // Win Animation SharedValues
   const headerTranslateY = useSharedValue(0);
@@ -102,6 +149,25 @@ export default function JigsawGameScreen() {
   const nextAreaHeightAnim = useSharedValue(0);
 
   const [earnedStars, setEarnedStars] = useState(0);
+
+  const clearWinTimeouts = () => {
+    winTimeoutsRef.current.forEach((timer) => clearTimeout(timer));
+    winTimeoutsRef.current = [];
+  };
+
+  const clearLevelTransitionTimeout = () => {
+    if (levelTransitionTimeoutRef.current) {
+      clearTimeout(levelTransitionTimeoutRef.current);
+      levelTransitionTimeoutRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      clearWinTimeouts();
+      clearLevelTransitionTimeout();
+    };
+  }, []);
 
   // Initialize Data (Initial Load)
   useEffect(() => {
@@ -130,53 +196,25 @@ export default function JigsawGameScreen() {
   };
 
   useEffect(() => {
-    if (status === "won" && level) {
-      // NOTE: Progress is NOT saved here anymore!
-      // It will be saved in handleNextLevel AFTER the ad is watched
+    clearWinTimeouts();
 
-      // 1. Trigger background prefetch for next level image
+    if (status === "won" && level) {
+      // Progress is saved when the player advances, regardless of ad availability.
+
       const prefetchNextLevel = async () => {
         try {
-          const cLvl = currentLevelId;
           let nextChapter = currentChapter;
-          let nextLevel = cLvl + 1;
+          let nextLevel = currentLevelId + 1;
 
-          // Check if next level exists in current chapter (Simple check via getLevelById)
-          // Note: getLevelById is async and checks the store
-          const nextLvlExists = await getLevelById(nextChapter, nextLevel);
-
-          if (!nextLvlExists) {
+          let nextLvl = await getLevelById(nextChapter, nextLevel);
+          if (!nextLvl) {
             nextChapter++;
             nextLevel = 1;
+            if (!getChapterById(nextChapter)) return;
+            nextLvl = await getLevelById(nextChapter, nextLevel);
           }
 
-          // Check if next chapter exists using store action
-          // We can't use getChapterById synchronous inside async efficiently if it's not loaded,
-          // but we called getChapters() at init.
-          // Better: just try to get the level. If level exists, chapter likely exists.
-          // OR check explicit chapter existence if nextLevel was reset to 1.
-
-          if (nextLevel === 1) {
-            // We moved to a new chapter, check if it exists
-            // We can fetch the chapter list or just try getLevelById again.
-            // But getLevelById might not check if chapter is valid in strict definitions?
-            // Let's rely on getLevelById returning null if chapter/level doesn't exist.
-          }
-
-          // If we want to be strict about "Last Chapter":
-          // const chapters = useDataStore.getState().chapters;
-          // if (nextChapter > chapters.length) return;
-          // But hooking into store state here is messy.
-          // Let's just try to fetch the level.
-
-          const nextLvl = await getLevelById(nextChapter, nextLevel);
-
-          if (nextLvl?.imageSource) {
-            const source = nextLvl.imageSource;
-            if (typeof source === "object" && "uri" in source && source.uri) {
-              await Image.prefetch(source.uri);
-            }
-          }
+          await prefetchLevelImage(nextLvl);
         } catch (e) {}
       };
       prefetchNextLevel();
@@ -187,30 +225,31 @@ export default function JigsawGameScreen() {
         const stars = calculateStars(moves, level.gridSize);
         setEarnedStars(stars);
 
-        // Animations - board moves DOWN on win
-        headerTranslateY.value = withTiming(-100, { duration: 400 });
+        // Header stays inside the safe area even during the win sequence.
+        headerTranslateY.value = withTiming(0, { duration: 400 });
         movesTranslateY.value = withTiming(-30, { duration: 500 });
         // Scale handled in separate useEffect
         // boardScale.value = withTiming(0.85, { duration: 500 });
 
-        setTimeout(() => {
+        winTimeoutsRef.current.push(setTimeout(() => {
           star1Scale.value = withTiming(1, { duration: 300 });
-        }, 400);
-        setTimeout(() => {
+        }, 400));
+        winTimeoutsRef.current.push(setTimeout(() => {
           star2Scale.value = withTiming(1, { duration: 300 });
-        }, 600);
-        setTimeout(() => {
+        }, 600));
+        winTimeoutsRef.current.push(setTimeout(() => {
           star3Scale.value = withTiming(1, { duration: 300 });
-        }, 800);
+        }, 800));
 
-        setTimeout(() => {
+        winTimeoutsRef.current.push(setTimeout(() => {
           setShowContinue(true);
           continueButtonScale.value = withTiming(1, { duration: 400 });
-        }, 1200);
+        }, 1200));
       }, 800);
-      return () => clearTimeout(timer);
+      winTimeoutsRef.current.push(timer);
+      return clearWinTimeouts;
     }
-  }, [status]);
+  }, [status, level, currentChapter, currentLevelId]);
 
   const handleBack = () => {
     router.back();
@@ -218,6 +257,7 @@ export default function JigsawGameScreen() {
 
   // Helper: Win UI resetleme kodunu ayır (Clean Code)
   const resetWinUI = () => {
+    clearWinTimeouts();
     setShowContinue(false);
     setEarnedStars(0);
     headerTranslateY.value = 0;
@@ -230,119 +270,105 @@ export default function JigsawGameScreen() {
   };
 
   const handleNextLevel = async () => {
+    if (isAdvancingRef.current) return;
     playClick();
     if (!level) return;
 
-    // 1. Sonraki Level ID'lerini hesapla
-    let nextChapter = currentChapter;
-    let nextLevelId = currentLevelId + 1;
+    isAdvancingRef.current = true;
+    setIsAdvancing(true);
+    setTransitionOverlayVisible(true);
+    setIsLoading(true);
 
-    // Check if next level exists in THIS chapter
-    const nextLevelInCurrentChapter = await getLevelById(
-      currentChapter,
-      nextLevelId,
-    );
+    const finishAdvancing = () => {
+      isAdvancingRef.current = false;
+      setIsAdvancing(false);
+    };
 
-    // Check if we exhausted current chapter
-    if (!nextLevelInCurrentChapter) {
-      // If no next level in this chapter, move to next chapter
-      nextChapter++;
-      nextLevelId = 1;
+    try {
+      let nextChapter = currentChapter;
+      let nextLevelId = currentLevelId + 1;
+      let nextLvlData = await getLevelById(currentChapter, nextLevelId);
 
-      // OPTIONAL: Check if next chapter exists before proceeding?
-      // For now, we will let logic proceed. If next chapter doesn't exist,
-      // subsequent getLevelById or logic inside completeLevel might handle it
-      // or the user will just be taken back if next load fails.
+      if (!nextLvlData) {
+        nextChapter++;
+        nextLevelId = 1;
 
-      // Better: Check if Chapter Exists
-      const nextChapterData = getChapterById(nextChapter);
-      if (!nextChapterData) {
-        // No more chapters!
-        router.back();
+        const nextChapterData = getChapterById(nextChapter);
+        if (!nextChapterData) {
+          setTransitionOverlayVisible(false);
+          router.back();
+          finishAdvancing();
+          return;
+        }
+
+        unlockChapter(nextChapter);
+        nextLvlData = await getLevelById(nextChapter, nextLevelId);
+      }
+
+      completeLevel(currentChapter, currentLevelId, moves, level.gridSize);
+
+      if (!nextLvlData) {
+        setIsLoading(false);
+        setTransitionOverlayVisible(false);
+        finishAdvancing();
         return;
       }
 
-      // Unlock the new chapter since we are proceeding to it
-      unlockChapter(nextChapter);
-    }
+      const imagePrefetchPromise = prefetchLevelImage(nextLvlData);
 
-    // -----------------------------------------------------------
-    // SENIOR DOKUNUŞU 1: "Fire and Forget"
-    // Mevcut level'ı kaydet ama bunu await etme, UI bloklanmasın.
-    // -----------------------------------------------------------
-    completeLevel(currentChapter, currentLevelId, moves, level.gridSize);
+      const isEligibleForAds = currentChapter !== 1 || currentLevelId >= 4;
 
-    const nextLevelPromise = getLevelById(nextChapter, nextLevelId);
-
-    // Interstitial: oyun ekranında birikmiş "aktif" süre eşiği dolunca ve reklam yüklüyse gösterilir.
-    const isEligibleForAds = currentChapter !== 1 || currentLevelId >= 4;
-
-    if (isEligibleForAds) {
-      flushPlaytime();
-      if (__DEV__) {
-        const s = useAdStore.getState();
-        const rulesOk = s.actions.interstitialEligibleByRules(
-          currentChapter,
-          currentLevelId,
-        );
-        console.log("📺 [dev] interstitial gate", {
-          playtimeMs: s.interstitialPlaytimeAccumMs,
-          ready: s.isInterstitialReady,
-          rulesOk,
-          chapter: currentChapter,
-          level: currentLevelId,
-        });
+      if (isEligibleForAds) {
+        flushPlaytime();
+        if (__DEV__) {
+          const s = useAdStore.getState();
+          const rulesOk = s.actions.interstitialEligibleByRules(
+            currentChapter,
+            currentLevelId,
+          );
+          console.log("📺 [dev] interstitial gate", {
+            playtimeMs: s.interstitialPlaytimeAccumMs,
+            ready: s.isInterstitialReady,
+            rulesOk,
+            chapter: currentChapter,
+            level: currentLevelId,
+          });
+        }
+        const canShow = useAdStore
+          .getState()
+          .actions.canShowInterstitial(currentChapter, currentLevelId);
+        if (canShow) {
+          await showInterstitial();
+        }
       }
-      const canShow = useAdStore
-        .getState()
-        .actions.canShowInterstitial(currentChapter, currentLevelId);
-      if (canShow) {
-        await showInterstitial();
-      }
-    }
 
-    // Reklam bitti. Verimiz %99 ihtimalle hazır.
-    const nextLvlData = await nextLevelPromise;
+      await imagePrefetchPromise;
 
-    if (!nextLvlData) {
+      clearLevelTransitionTimeout();
+      levelTransitionTimeoutRef.current = setTimeout(() => {
+        resetWinUI();
+        resetGame();
+        initializeLevel(nextLvlData.gridSize);
+
+        setCurrentChapter(nextChapter);
+        setCurrentLevelId(nextLevelId);
+        setLevel(nextLvlData);
+        setLastPlayed(nextChapter, nextLevelId);
+
+        levelTransitionTimeoutRef.current = setTimeout(() => {
+          levelTransitionTimeoutRef.current = null;
+          setTransitionOverlayVisible(false);
+          setBoardRevealKey((key) => key + 1);
+          setIsLoading(false);
+          finishAdvancing();
+        }, 80);
+      }, 50);
+    } catch (error) {
+      console.warn("Level transition failed:", error);
       setIsLoading(false);
-      return;
+      setTransitionOverlayVisible(false);
+      finishAdvancing();
     }
-
-    // Resim cache'de mi? Değilse hemen prefetch at (Hızlı yükleme için)
-    if (
-      typeof nextLvlData.imageSource === "object" &&
-      "uri" in nextLvlData.imageSource &&
-      nextLvlData.imageSource.uri
-    ) {
-      await Image.prefetch(nextLvlData.imageSource.uri);
-    }
-
-    // -----------------------------------------------------------
-    // SENIOR DOKUNUŞU 3: "Clean Slate" (Eski Tahtayı Yok Et)
-    // Yeni level hesaplanırken eski tahtanın görünmemesi için
-    // level state'ini geçici olarak boşaltıyoruz.
-    // -----------------------------------------------------------
-    setLevel(undefined); // <--- BU SATIR "HAYALET TAHTA"YI ÖNLER
-    setIsLoading(true); // Araya minik bir loading girsin, donmasından iyidir.
-
-    // UI Thread nefes alsın diye state update'i bir sonraki tick'e atıyoruz
-    setTimeout(() => {
-      // UI Temizliği
-      resetWinUI();
-
-      // Yeni Oyun Başlatma
-      resetGame();
-      initializeLevel(nextLvlData.gridSize);
-
-      // State Güncellemeleri
-      setCurrentChapter(nextChapter);
-      setCurrentLevelId(nextLevelId);
-      setLevel(nextLvlData); // <--- Yeni level şimdi render olacak
-      setLastPlayed(nextChapter, nextLevelId);
-
-      setIsLoading(false);
-    }, 50); // 50ms gecikme insan gözüne batmaz ama JS thread'i kurtarır.
   };
 
   const handleReplay = () => {
@@ -462,201 +488,225 @@ export default function JigsawGameScreen() {
   }
 
   return (
-    <GestureHandlerRootView
-      style={{ flex: 1, backgroundColor: COLORS.background }}
-    >
-      <BackgroundMusic />
+    <SafeAreaProvider style={{ flex: 1 }}>
+      <GestureHandlerRootView
+        style={{ flex: 1, backgroundColor: COLORS.background }}
+      >
+        <BackgroundMusic />
 
-      <View style={{ flex: 1, backgroundColor: COLORS.background }}>
-        {/* 1. HEADER (5% + Safe Area Top) */}
-        {/* We use a container with explicit height to reserve space in the stack */}
-        <View style={{ height: HEADER_HEIGHT_TOTAL, zIndex: 100 }}>
-          <GameHeader
-            title={level?.name || `Level ${currentLevelId}`}
-            imageSource={level?.imageSource}
-            onBack={handleBack}
-            // onReplay removed
-            onPreview={() => setShowPreview(true)}
-            topInset={insets.top}
-            // GameHeader logic: height prop is the content height. It adds topInset itself.
-            // We want it to be visually fitting.
-            height={HEADER_HEIGHT_CONTENT}
-            animatedStyle={headerAnimatedStyle}
-          />
-        </View>
-
-        {/* 2. & 3. INFO ROW (Stats + Stars) */}
-        <View
-          style={{
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 4,
-            zIndex: 90,
-            width: "100%",
-            marginTop: 8,
-            marginBottom: 8,
-          }}
-        >
-          <GameStats
-            moves={moves}
-            // height removed, use natural
-            movesAnimatedStyle={movesAnimatedStyle}
-          />
-      {/*    <Text style={styles.playtimeHint} numberOfLines={1}>
-            Aktif oyun: {formattedTotal} / {formattedThreshold}
-            {msUntilAd > 0
-              ? ` (${formattedUntilAd} kalan)`
-              : " — süre eşiği doldu"}
-          </Text>
-*/}
-          {/* Stars Area */}
-          <Animated.View style={starsAnimatedStyle}>
-            <View style={{ flexDirection: "row", gap: 4 }}>
-              {[1, 2, 3].map((star) => (
-                <Animated.View
-                  key={star}
-                  style={
-                    star === 1
-                      ? star1Style
-                      : star === 2
-                        ? star2Style
-                        : star3Style
-                  }
-                >
-                  <StarIcon size={40} dimmed={earnedStars < star} />
-                </Animated.View>
-              ))}
-            </View>
-          </Animated.View>
-        </View>
-
-        {/* 4. BOARD AREA (Flex: 1 - Takes remaining space) */}
-        <View
-          style={{
-            flex: 1,
-            width: width,
-            overflow: "hidden",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: 20, // Move spacing here
-          }}
-        >
-          {/* CONFETTI - BEHIND BOARD */}
-          {status === "won" && (
-            <View style={styles.confettiContainer} pointerEvents="none">
-              <LottieView
-                source={require("@/src/assets/animations/confettie.json")}
-                style={{ flex: 1 }}
-                autoPlay
-                loop={true}
+        <View style={styles.screenContent}>
+          <View style={styles.gameArea}>
+            {/* 1. HEADER (5% + Safe Area Top) */}
+            {/* We use a container with explicit height to reserve space in the stack */}
+            <View style={{ height: HEADER_HEIGHT_TOTAL, zIndex: 100 }}>
+              <GameHeader
+                title={level?.name || `Level ${currentLevelId}`}
+                imageSource={level?.imageSource}
+                onBack={handleBack}
+                // onReplay removed
+                onPreview={() => setShowPreview(true)}
+                topInset={insets.top}
+                // GameHeader logic: height prop is the content height. It adds topInset itself.
+                // We want it to be visually fitting.
+                height={HEADER_HEIGHT_CONTENT}
+                animatedStyle={headerAnimatedStyle}
               />
             </View>
-          )}
 
-          {/* BOARD CONTENT */}
-          <Animated.View
-            style={[
-              {
-                flex: 1,
-                width: "100%",
+            {/* 2. & 3. INFO ROW (Stats + Stars) */}
+            <View
+              style={{
+                flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-              },
-              boardAnimatedStyle,
-            ]}
-          >
-            {level ? (
-              <JigsawBoard
-                key={`${currentChapter}-${currentLevelId}`}
-                gridSize={level.gridSize}
-                imageSource={level.imageSource}
-                boardWidth={width}
-                // Use approximate max height to calculate piece sizes
-                // The flex container will clip/shrink the view, but piece calculations
-                // stay based on this "ideal" height.
-                boardHeight={height - HEADER_HEIGHT_TOTAL - BANNER_HEIGHT - 60}
+                gap: 4,
+                zIndex: 90,
+                width: "100%",
+                marginTop: 8,
+                marginBottom: 8,
+              }}
+            >
+              <GameStats
+                moves={moves}
+                // height removed, use natural
+                movesAnimatedStyle={movesAnimatedStyle}
               />
-            ) : (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={COLORS.accent} />
+          {/*    <Text style={styles.playtimeHint} numberOfLines={1}>
+                Aktif oyun: {formattedTotal} / {formattedThreshold}
+                {msUntilAd > 0
+                  ? ` (${formattedUntilAd} kalan)`
+                  : " — süre eşiği doldu"}
+              </Text>
+    */}
+              {/* Stars Area */}
+              <Animated.View style={starsAnimatedStyle}>
+                <View style={{ flexDirection: "row", gap: 4 }}>
+                  {[1, 2, 3].map((star) => (
+                    <Animated.View
+                      key={star}
+                      style={
+                        star === 1
+                          ? star1Style
+                          : star === 2
+                            ? star2Style
+                            : star3Style
+                      }
+                    >
+                      <StarIcon size={40} dimmed={earnedStars < star} />
+                    </Animated.View>
+                  ))}
+                </View>
+              </Animated.View>
+            </View>
+
+            {/* 4. BOARD AREA (Flex: 1 - Takes remaining space) */}
+            <View
+              style={{
+                flex: 1,
+                width: width,
+                overflow: "hidden",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 20, // Move spacing here
+              }}
+            >
+              {/* CONFETTI - BEHIND BOARD */}
+              {status === "won" && (
+                <View style={styles.confettiContainer} pointerEvents="none">
+                  <LottieView
+                    source={require("@/src/assets/animations/confettie.json")}
+                    style={{ flex: 1 }}
+                    autoPlay
+                    loop={true}
+                  />
+                </View>
+              )}
+
+              {/* BOARD CONTENT */}
+              <Animated.View
+                style={[
+                  {
+                    flex: 1,
+                    width: "100%",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  },
+                  boardAnimatedStyle,
+                ]}
+              >
+                {level ? (
+                  <JigsawBoard
+                    key={`${currentChapter}-${currentLevelId}`}
+                    gridSize={level.gridSize}
+                    imageSource={level.imageSource}
+                    boardWidth={width}
+                    // Use approximate max height to calculate piece sizes
+                    // The flex container will clip/shrink the view, but piece calculations
+                    // stay based on this "ideal" height.
+                    boardHeight={height - HEADER_HEIGHT_TOTAL - BANNER_HEIGHT - 60}
+                    canRevealPieces={!transitionOverlayVisible}
+                    revealKey={boardRevealKey}
+                  />
+                ) : (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={COLORS.accent} />
+                  </View>
+                )}
+              </Animated.View>
+            </View>
+
+            {/* 5. NEXT / LEVEL COMPLETE AREA (Variable Height) */}
+            <Animated.View style={nextAreaAnimatedStyle}>
+              <LevelCompleteOverlay
+                visible={true}
+                animatedStyle={continueButtonStyle}
+                onNext={handleNextLevel}
+                onReplay={handleReplay}
+                disabled={isAdvancing}
+              />
+            </Animated.View>
+
+            {transitionOverlayVisible && (
+              <View style={styles.transitionOverlay} pointerEvents="auto">
+                <View style={styles.transitionLoadingBox}>
+                  <ActivityIndicator size="large" color={COLORS.accent} />
+                  <Text style={styles.loadingText}>Level Hazırlanıyor...</Text>
+                </View>
               </View>
             )}
-          </Animated.View>
-        </View>
-
-        {/* 5. NEXT / LEVEL COMPLETE AREA (Variable Height) */}
-        <Animated.View style={nextAreaAnimatedStyle}>
-          <LevelCompleteOverlay
-            visible={true}
-            animatedStyle={continueButtonStyle}
-            onNext={handleNextLevel}
-            onReplay={handleReplay}
-          />
-        </Animated.View>
-
-        {/* 6. BANNER (Fixed Layout, Margin Auto) */}
-        <View
-          style={{
-            height: BANNER_HEIGHT + insets.bottom, // Add safe area to total height
-            paddingBottom: insets.bottom, // Push content up
-            justifyContent: "flex-end",
-            alignItems: "center",
-            backgroundColor: "transparent",
-            zIndex: 50,
-            marginTop: "auto",
-          }}
-        >
-          <GameBannerAd />
-        </View>
-      </View>
-
-      {/* GLOBAL MODALS */}
-      {__DEV__ && status === "playing" && level && !isLoading && (
-        <TouchableOpacity
-          style={[
-            styles.devSolveFab,
-            {
-              bottom: BANNER_HEIGHT + insets.bottom + 16,
-              right: 12,
-            },
-          ]}
-          onPress={devSolveLevel}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.devSolveFabText}>Hızlı çöz (dev)</Text>
-        </TouchableOpacity>
-      )}
-
-      <Modal
-        visible={showPreview}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowPreview(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowPreview(false)}
-        >
-          <View style={styles.previewContainer}>
-            {level && (
-              <Image
-                source={level.imageSource}
-                style={{ width: width * 0.9, height: height * 0.6 }}
-                contentFit="contain"
-                cachePolicy="memory-disk"
-              />
-            )}
-            <Text style={styles.previewText}>Tap to Close</Text>
           </View>
-        </TouchableOpacity>
-      </Modal>
-    </GestureHandlerRootView>
+
+          <View
+            style={{
+              height: BANNER_HEIGHT + insets.bottom,
+              paddingBottom: insets.bottom,
+              justifyContent: "flex-end",
+              alignItems: "center",
+              backgroundColor: "transparent",
+              zIndex: 50,
+            }}
+          >
+            <GameBannerAd />
+          </View>
+        </View>
+
+        {/* GLOBAL MODALS */}
+        {__DEV__ && status === "playing" && level && !isLoading && (
+          <TouchableOpacity
+            style={[
+              styles.devSolveFab,
+              {
+                bottom: BANNER_HEIGHT + insets.bottom + 16,
+                right: 12,
+              },
+            ]}
+            onPress={devSolveLevel}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.devSolveFabText}>Hızlı çöz (dev)</Text>
+          </TouchableOpacity>
+        )}
+
+        <Modal
+          visible={showPreview}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowPreview(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowPreview(false)}
+          >
+            <View style={styles.previewContainer}>
+              {level && (
+                <Image
+                  source={level.imageSource}
+                  style={{ width: width * 0.9, height: height * 0.6 }}
+                  contentFit="contain"
+                  cachePolicy="memory-disk"
+                />
+              )}
+              <Text style={styles.previewText}>Tap to Close</Text>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  screenContent: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  gameArea: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    overflow: "hidden",
+    position: "relative",
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -676,13 +726,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  // header: removed
-  // headerCenter: removed
-  // headerTitle: removed
-  gameArea: {
-    width: "100%",
-    backgroundColor: "transparent",
-    overflow: "hidden",
+  transitionOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    elevation: 1000,
+    backgroundColor: COLORS.background,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  transitionLoadingBox: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    gap: 12,
+    minWidth: 180,
   },
   modalOverlay: {
     flex: 1,

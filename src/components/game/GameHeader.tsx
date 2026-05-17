@@ -5,6 +5,7 @@ import { Image } from "expo-image";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import Animated from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
 import GameSettings from "../GameSettings";
 
 interface GameHeaderProps {
@@ -32,35 +33,43 @@ const GameHeader: React.FC<GameHeaderProps> = ({
     <Animated.View
       style={[
         styles.header,
-        { paddingTop: topInset, height: height + topInset },
+        { height: height + topInset },
         animatedStyle,
       ]}
     >
-      <View style={styles.headerLeftGroups}>
-        <TouchableOpacity onPress={onBack} style={styles.headerBtn}>
-          <Ionicons name="chevron-back" size={28} color={COLORS.textPrimary} />
-        </TouchableOpacity>
-        {/* Spacer to balance the Right side (2 buttons vs 1 button) */}
-        <View style={{ width: 40 }} />
-      </View>
-      <View style={styles.headerCenter}>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {title}
-        </Text>
-      </View>
-      <View style={styles.headerRightGroups}>
-        <TouchableOpacity onPress={onPreview} style={styles.headerBtn}>
-          {imageSource && (
-            <Image
-              source={imageSource}
-              style={styles.thumbnail}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-            />
-          )}
-        </TouchableOpacity>
-        <GameSettings />
-      </View>
+      <SafeAreaView edges={["top"]} style={styles.headerSafeArea}>
+        <View style={[styles.headerContent, { height }]}>
+          <View style={styles.headerLeftGroups}>
+            <TouchableOpacity onPress={onBack} style={styles.headerBtn}>
+              <Ionicons
+                name="chevron-back"
+                size={28}
+                color={COLORS.textPrimary}
+              />
+            </TouchableOpacity>
+            {/* Spacer to balance the Right side (2 buttons vs 1 button) */}
+            <View style={{ width: 40 }} />
+          </View>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {title}
+            </Text>
+          </View>
+          <View style={styles.headerRightGroups}>
+            <TouchableOpacity onPress={onPreview} style={styles.headerBtn}>
+              {imageSource && (
+                <Image
+                  source={imageSource}
+                  style={styles.thumbnail}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                />
+              )}
+            </TouchableOpacity>
+            <GameSettings />
+          </View>
+        </View>
+      </SafeAreaView>
     </Animated.View>
   );
 };
@@ -68,11 +77,16 @@ const GameHeader: React.FC<GameHeaderProps> = ({
 const styles = StyleSheet.create({
   header: {
     width: "100%",
+    zIndex: 100,
+  },
+  headerSafeArea: {
+    flex: 1,
+  },
+  headerContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 8,
-    zIndex: 100,
   },
   headerLeftGroups: {
     flexDirection: "row",

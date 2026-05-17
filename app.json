@@ -2,12 +2,11 @@
   "expo": {
     "name": "Tilo",
     "slug": "tilo",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./src/assets/images/icon.png",
     "scheme": "tilo",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "splash": {
       "image": "./src/assets/images/splash-icon.png",
       "resizeMode": "contain",
@@ -41,7 +40,6 @@
         "foregroundImage": "./src/assets/images/adaptive-icon.png",
         "backgroundColor": "#0a0a0f"
       },
-      "edgeToEdgeEnabled": true,
       "permissions": [
         "com.google.android.gms.permission.AD_ID",
         "android.permission.RECORD_AUDIO",

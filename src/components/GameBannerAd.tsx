@@ -1,10 +1,7 @@
 import React from "react";
 import {Platform, StyleSheet, Text, View} from "react-native";
 import {AD_CONFIG, COLORS} from "../constants/gameConfig";
-import {
-    useAdActions,
-    useIsAdShowing,
-} from "../store/adStore";
+import {useAdActions} from "../store/adStore";
 import {BannerAd, BannerAdSize, TestIds} from "react-native-google-mobile-ads"
 
 
@@ -16,17 +13,10 @@ interface GameBannerAdProps {
 const GameBannerAd: React.FC<GameBannerAdProps> = ({
                                                        onAdLoaded,
                                                        onAdFailedToLoad,
-                                                   }) => {
+}) => {
     const adActions = useAdActions();
-    const isAdShowing = useIsAdShowing();
-
 
     if (!BannerAd || !BannerAdSize) {
-        return null;
-    }
-
-    // Hide banner if a full-screen ad involves ensuring no multiple ads are shown
-    if (isAdShowing) {
         return null;
     }
 

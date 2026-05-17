@@ -144,6 +144,7 @@ export const STORAGE_KEYS = {
   LAST_PLAYED: "@puzzle_game_last_played",
   DEVICE_ID: "@puzzle_game_device_id",
   LEVEL_STATE: "@puzzle_game_level_state",
+  HINT_COUNT: "@puzzle_game_hint_count",
 };
 
 // CHAPTER DATA handles moved to DataStore/Service

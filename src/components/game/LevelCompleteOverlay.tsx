@@ -9,23 +9,33 @@ interface LevelCompleteOverlayProps {
   animatedStyle?: any;
   onNext: () => void;
   onReplay: () => void;
+  disabled?: boolean;
 }
 
 const LevelCompleteOverlay: React.FC<LevelCompleteOverlayProps> = ({
   animatedStyle,
   onNext,
   onReplay,
+  disabled = false,
 }) => {
   // if (!visible) return null; // Parent controls layout, we just fill it
 
   return (
     <Animated.View style={[styles.continueContainer, animatedStyle]}>
       <View style={styles.buttonsRow}>
-        <TouchableOpacity style={styles.replayButton} onPress={onReplay}>
+        <TouchableOpacity
+          style={[styles.replayButton, disabled && styles.disabledButton]}
+          onPress={onReplay}
+          disabled={disabled}
+        >
           <Ionicons name="refresh" size={28} color="white" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.continueButton} onPress={onNext}>
+        <TouchableOpacity
+          style={[styles.continueButton, disabled && styles.disabledButton]}
+          onPress={onNext}
+          disabled={disabled}
+        >
           <Text style={styles.continueText}>SONRAKİ</Text>
           <Ionicons name="arrow-forward" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
@@ -75,6 +85,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.2)", // Semi-transparent white background
     alignItems: "center",
     justifyContent: "center",
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   // replayText removed
 });

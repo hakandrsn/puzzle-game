@@ -23,6 +23,8 @@ interface JigsawPieceProps {
   dragTranslation: SharedValue<{ x: number; y: number }>;
   onDragStart: (groupId: string) => void;
   onDragEnd: (pieceId: number, finalX: number, finalY: number) => void;
+  canReveal?: boolean;
+  revealKey?: number;
   hasNeighborTop?: boolean;
   hasNeighborBottom?: boolean;
   hasNeighborLeft?: boolean;
@@ -43,6 +45,8 @@ const JigsawPiece: React.FC<JigsawPieceProps> = ({
   dragTranslation,
   onDragStart,
   onDragEnd,
+  canReveal = true,
+  revealKey = 0,
   hasNeighborTop = false,
   hasNeighborBottom = false,
   hasNeighborLeft = false,
@@ -62,11 +66,14 @@ const JigsawPiece: React.FC<JigsawPieceProps> = ({
   const flipRotation = useSharedValue(180);
 
   useEffect(() => {
+    flipRotation.value = 180;
+    if (!canReveal) return;
+
     // Staggered flip animation
     const INITIAL_DELAY = 500;
     const delay = INITIAL_DELAY + piece.id * 40;
     flipRotation.value = withDelay(delay, withTiming(0, { duration: 600 }));
-  }, [piece.id]);
+  }, [piece.id, canReveal, revealKey]);
 
   useLayoutEffect(() => {
     const diffX = targetX - prevTarget.current.x;
@@ -107,7 +114,7 @@ const JigsawPiece: React.FC<JigsawPieceProps> = ({
   const gesture = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(!gameOver)
+        .enabled(!gameOver && canReveal)
         .onStart(() => {
           runOnJS(onDragStart)(piece.groupId);
           draggedGroupId.value = piece.groupId;
@@ -132,6 +139,7 @@ const JigsawPiece: React.FC<JigsawPieceProps> = ({
       targetX,
       targetY,
       gameOver,
+      canReveal,
       onDragStart,
       onDragEnd,
     ],

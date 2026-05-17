@@ -12,6 +12,8 @@ interface JigsawBoardProps {
   imageSource: ImageSource;
   boardWidth: number;
   boardHeight: number;
+  canRevealPieces?: boolean;
+  revealKey?: number;
 }
 
 const BOARD_PADDING = 32;
@@ -23,6 +25,8 @@ const JigsawBoard: React.FC<JigsawBoardProps> = ({
   imageSource,
   boardWidth,
   boardHeight,
+  canRevealPieces = true,
+  revealKey = 0,
 }) => {
   const pieces = useJigsawStore((state) => state.pieces);
   const isInitialized = useJigsawStore((state) => state.isInitialized);
@@ -171,6 +175,8 @@ const JigsawBoard: React.FC<JigsawBoardProps> = ({
               dragTranslation={dragTranslation}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
+              canReveal={canRevealPieces}
+              revealKey={revealKey}
               hasNeighborTop={conn.top}
               hasNeighborBottom={conn.bottom}
               hasNeighborLeft={conn.left}

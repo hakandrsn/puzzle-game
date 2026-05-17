@@ -21,6 +21,7 @@ export const COLORS = {
   // Main Theme
   background: PALETTE.turquoise,
   surface: PALETTE.white, // Cleaner look on turquoise
+  surfaceLight: "rgba(255, 255, 255, 0.7)",
   card: "rgba(255, 255, 255, 0.9)", // For overlays/cards
 
   // Interactive

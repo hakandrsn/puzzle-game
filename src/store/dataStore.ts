@@ -22,6 +22,9 @@ interface DataStore extends DataState {
   actions: DataActions;
 }
 
+let chaptersPromise: Promise<Chapter[]> | null = null;
+const levelsPromiseByChapter: Partial<Record<number, Promise<Level[]>>> = {};
+
 export const useDataStore = create<DataStore>((set, get) => ({
   chapters: [],
   levelsCache: {},
@@ -31,26 +34,50 @@ export const useDataStore = create<DataStore>((set, get) => ({
     getChapters: async () => {
       const { chapters } = get();
       if (chapters.length > 0) return chapters;
+      if (chaptersPromise) return chaptersPromise;
 
       set({ isLoading: true });
-      const fetchedChapters = await fetchChapters();
+      chaptersPromise = fetchChapters()
+        .then((fetchedChapters) => {
+          set({ chapters: fetchedChapters, isLoading: false });
+          return fetchedChapters;
+        })
+        .catch((error) => {
+          set({ isLoading: false });
+          throw error;
+        })
+        .finally(() => {
+          chaptersPromise = null;
+        });
 
-      set({ chapters: fetchedChapters, isLoading: false });
-      return fetchedChapters;
+      return chaptersPromise;
     },
 
     getLevels: async (chapterId: number) => {
       const { levelsCache } = get();
       if (levelsCache[chapterId]) return levelsCache[chapterId];
-      console.log(levelsCache[chapterId]);
+      if (levelsPromiseByChapter[chapterId]) {
+        return levelsPromiseByChapter[chapterId];
+      }
 
       set({ isLoading: true });
-      const fetchedLevels = await fetchLevels(chapterId);
-      set((state) => ({
-        levelsCache: { ...state.levelsCache, [chapterId]: fetchedLevels },
-        isLoading: false,
-      }));
-      return fetchedLevels;
+      levelsPromiseByChapter[chapterId] = fetchLevels(chapterId)
+        .then((fetchedLevels) => {
+          set((state) => ({
+            levelsCache: { ...state.levelsCache, [chapterId]: fetchedLevels },
+            isLoading: false,
+          }));
+          return fetchedLevels;
+        })
+        .catch((error) => {
+          set({ isLoading: false });
+          throw error;
+        })
+        .finally(() => {
+          delete levelsPromiseByChapter[chapterId];
+        });
+
+      return levelsPromiseByChapter[chapterId];
     },
 
     getChapterById: (id: number) => {
